@@ -1174,14 +1174,16 @@ void StartSecurityTask(void *argument)
 		RUN
 	};
 	uint8_t status=0, direction, doorPosition, limitSwitch, switchRTig, switchFlag, zeroCurrent, overCurrent;
+	uint16_t speed;
 	HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_2);
 	uint32_t timer, beepTimer;
 	if (!HAL_GPIO_ReadPin(IN1_GPIO_Port, IN1_Pin)) { //Чекаем концевик замка двЁрки
 		doorPosition = CLOSED;
 	} else doorPosition = UNKNOWN;
 	char trans_str[13];
-	const uint16_t maxCurrent = 590;
-	const uint16_t nullCurrent = 470;
+	const uint16_t maxCurrent = 680;
+	const uint16_t nullCurrent = 480;
+	const uint16_t maxSpeed = 500;
   /* Infinite loop */
   for(;;)
   {
@@ -1218,6 +1220,7 @@ void StartSecurityTask(void *argument)
 			}
 			timer = HAL_GetTick();
 			beepTimer = timer;
+			speed = maxSpeed;
 			if(doorPosition != UNKNOWN){
 				if(getState() !=0) {
 					status = STOP;
@@ -1231,6 +1234,7 @@ void StartSecurityTask(void *argument)
 					status = RUN;
 					doorPosition = MIDDLE;
 				} else if(doorPosition == MIDDLE){
+					speed=200;
 					if(direction == CLOSING) direction = OPENING;
 					else direction = CLOSING;
 					status = RUN;
@@ -1258,28 +1262,33 @@ void StartSecurityTask(void *argument)
 		else overCurrent = 0;
 	}
 	if(status == RUN && overCurrent){
+		status = STOP;
+		doorPosition=MIDDLE;
 		setSpeed(0);
 		osDelay(350);
-		if(direction == CLOSING) direction = OPENING;
-		else direction = CLOSING;
+		if(direction == CLOSING) setMotorDirection(NORMAL);
+		else setMotorDirection(REVERSE);
 		overCurrent = 0;
-		timer = HAL_GetTick();
+		setSpeed(220);
+		osDelay(3000);
+		setSpeed(0);
 	}
 
 		if (status == RUN) {
 			switch (direction) {
 			case OPENING:
-				openDoor(3600, timer);
+				openDoor(3200, timer, speed);
 				break;
 			case CLOSING:
-				closeDoor(4000, timer);
+				closeDoor(4000, timer, speed);
 				break;
 			case INITIALIZATION:
-				initDoorPosition(330, 10000, timer);
+				initDoorPosition(190, 10000, timer);
 				break;
 			}
-			if (direction == CLOSING && (!getState() || switchRTig)) {
+			if (direction == CLOSING && (!getState() || switchRTig || zeroCurrent)) {
 				setSmoothSpeed(60);
+				osDelay(300);
 				smoothTick(0);
 				status = STOP;
 				switchRTig = 0;
