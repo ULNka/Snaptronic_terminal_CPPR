@@ -25,10 +25,11 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 #include "init.h"
+#include "lcd1602.h"
 #include "usb_modbus.h"
 #include "slaveDevices.h"
 #include "Modbus.h"
-#include "terminal_util_360.h"
+#include "terminal_util_DG.h"
 #include "GyverMotor.h"
 #include "wiegand.h"
 //#include "eeprom.h"
@@ -42,11 +43,8 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define LCD_ADDR (0x27 << 1)       // адрес дисплея, сдвинутый на 1 бит влево (HAL работает с I2C-адресами, сдвинутыми на 1 бит влево)
-#define PIN_RS    (1 << 0)         // если на ножке 0, данные воспринимаются как команда, если 1 - как символы для вывода
-#define PIN_EN    (1 << 2)         // бит, по изменению сост. которого считывается информация
-#define BACKLIGHT (1 << 3)         // управление подсветкой
-#define LCD_DELAY_MS 2
+#define MASTER_KEY 6393037			//Код мастер ключа
+#define FIRST_KEY 6393038			//Код первого ключа
 #define D0        D0_Pin
 #define D1        D1_Pin
 /* USER CODE END PD */
@@ -149,7 +147,7 @@ const osSemaphoreAttr_t usbSem_attributes = {
   .name = "usbSem"
 };
 /* USER CODE BEGIN PV */
-
+uint8_t lightEffect=1;		//0-нет связи, 1-свободно, 2-занято, 3-техобслуживание, 4-заезд авто, 5-открывание дверки, 6-двкерка открыта
 volatile uint8_t adcDataIsReady=0;
 volatile uint8_t wig_flag_inrt = 1;
 uint16_t adc[2];
@@ -194,35 +192,7 @@ int16_t map(int16_t input, int16_t inMin, int16_t inMax, int16_t outMin,
 	result = (((input - inMin) * (outMax - outMin)) / (inMax - inMin)) + outMin;
 	return result;
 }
-void I2C_send(uint8_t data, uint8_t flags) {
-	HAL_StatusTypeDef res;
-	/*for (;;) {                                               // бесконечный цикл
-		res = HAL_I2C_IsDeviceReady(&hi2c1, LCD_ADDR, 1, HAL_MAX_DELAY); // проверяем, готово ли устройство по адресу lcd_addr для связи
-		if (res == HAL_OK)
-			break;                  // если да, то выходим из бесконечного цикла
-	}*/
 
-	uint8_t up = data & 0xF0; // операция  с 1111 0000, приводит к обнулению последних бит с 0 по 3, остаются биты с 4 по 7
-	uint8_t lo = (data << 4) & 0xF0; // тоже самое, но data сдвигается на 4 бита влево, т.е. в этой
-									 // переменной остаются  биты с 0 по 3
-	uint8_t data_arr[4];
-	data_arr[0] = up | flags | BACKLIGHT | PIN_EN; // 4-7 биты содержат информацию, биты 0-3 конфигурируют работу
-	data_arr[1] = up | flags | BACKLIGHT; // ублирование сигнала, на выводе Е в этот раз 0
-	data_arr[2] = lo | flags | BACKLIGHT | PIN_EN;
-	data_arr[3] = lo | flags | BACKLIGHT;
-
-	HAL_I2C_Master_Transmit(&hi2c1, LCD_ADDR, data_arr, sizeof(data_arr),
-			HAL_MAX_DELAY);
-	//HAL_I2C_Master_Transmit_DMA(&hi2c1, LCD_ADDR, data_arr, sizeof(data_arr));
-	HAL_Delay (LCD_DELAY_MS);
-}
-void LCD_SendString(char *str) {
-	// *char по сути является строкой
-	while (*str) {                                 // пока строчка не закончится
-		I2C_send((uint8_t)(*str), 1);        // передача первого символа строки
-		str++;                                // сдвиг строки налево на 1 символ
-	}
-}
 
 /* USER CODE END PFP */
 
@@ -294,7 +264,7 @@ struct dataMain settings;
   HAL_ADCEx_Calibration_Start(&hadc1);
   HAL_ADC_Start_DMA(&hadc1, (uint32_t*)&adc, 2); // стартуем АЦП
   /* пока что так, затем реализовать чтение настроек из EEPROM */
-  settings.timeToEntance=40;
+  settings.timeToEntance=40;				//Время заезда
   settings.timeToExit=40;
   settings.startDelay=3;
   settings.gateMode=1;
@@ -1035,7 +1005,7 @@ void StartUsbSlave(void *argument)
   {
 	osSemaphoreAcquire(usbSemHandle, portMAX_DELAY);
 	HAL_GPIO_WritePin(LED4_GPIO_Port, LED4_Pin, 0);
-	osTimerStart(usbLedTimerHandle, 60);
+	osTimerStart(usbLedTimerHandle, 80);
 	usbModbusProcessing();
     osDelay(1);
   }
@@ -1058,8 +1028,8 @@ void StartRobotProcess(void *argument)
   for(;;)
   {
 	  dataFromUsbProcessing();
-	  robotHandler();
 	  gatePhotoHandler();
+	  robotHandler();
 
 	  usbDiscreteRegister[6] = isReady;
 	  usbDiscreteRegister[7] = controllerError;
@@ -1203,21 +1173,23 @@ void StartSecurityTask(void *argument)
 		uint32_t wcode = getCode();
 
 		/*----ОТЛАДКА----*/
-		int16_t wtype = getWiegandType();
+		/*int16_t wtype = getWiegandType();
 		wig_flag_inrt = 1;
 		char str[64] = { 0, };
 		snprintf(str, 64, "HEX=0x%lX DEC=%lu, Protokol Wiegand-%d\n", wcode,
 				wcode, wtype);
-		HAL_UART_Transmit(&huart4, (uint8_t*) str, strlen(str), 1000);
+		HAL_UART_Transmit(&huart4, (uint8_t*) str, strlen(str), 1000);*/
 		/*----КОНЕЦ БЛОКА ОТЛАДК�?----*/
 
-		if (wcode == 2844933 || wcode == 6393037) {
+		if (wcode == MASTER_KEY || wcode == FIRST_KEY) {
+			//Подадим предупреждающий сигнал
 			if(status == STOP){
 			HAL_GPIO_WritePin(BUZZER_GPIO_Port, BUZZER_Pin, 1);
 			osDelay(1000);
 			HAL_GPIO_WritePin(BUZZER_GPIO_Port, BUZZER_Pin, 0);
 			osDelay(500);
 			}
+
 			timer = HAL_GetTick();
 			beepTimer = timer;
 			speed = maxSpeed;
@@ -1244,13 +1216,13 @@ void StartSecurityTask(void *argument)
 				status = RUN;
 			}
 		} else {
+			// Сигнал неверного ключа
 			for(int8_t i = 0; i<3; i++){
 				HAL_GPIO_WritePin(BUZZER_GPIO_Port, BUZZER_Pin, 1);
 				osDelay(100);
 				HAL_GPIO_WritePin(BUZZER_GPIO_Port, BUZZER_Pin, 0);
 				osDelay(100);
 			}
-
 		}
 	}
 //---------Контроль тока мотора-------------//
@@ -1329,7 +1301,7 @@ void StartSecurityTask(void *argument)
 	  else HAL_GPIO_WritePin(LED3_GPIO_Port, LED3_Pin, 1);
 
 
-    osDelay(1);
+    osDelay(10);
   }
   /* USER CODE END StartSecurityTask */
 }
@@ -1344,13 +1316,6 @@ void StartSecurityTask(void *argument)
 void StartLedStrip(void *argument)
 {
   /* USER CODE BEGIN StartLedStrip */
-//	HAL_TIM_PWM_Start_DMA(&htim2, TIM_CHANNEL_3, 3, 2);
-//	HAL_TIM_PWM_Start(&htim2, TIM_CHANNEL_3);
-//
-//	TIM2->CCR3 = 10;
-//	 ARGB_Init();  // Initialization
-//	 ARGB_Clear();
-
 
   /* Infinite loop */
   for(;;)
