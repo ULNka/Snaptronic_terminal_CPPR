@@ -27,7 +27,6 @@ enum {
 	check,
 	reset
 };
-extern osStatus_t statuss;
 extern uint16_t usbHoldingRegister[16];
 extern uint8_t usbDiscreteRegister[9];
 extern modbusHandler_t ModbusH2;
@@ -37,7 +36,7 @@ const uint16_t impTime = 1500; //Длительность сигнального
 uint8_t timeToEntance=31, timeToExit, gateMode, startDelay, gateOutputFlag;
 uint8_t isReady = 1, readyFlag=1, inProgress, isFinish, pause, chasisDisabled, techBreack, controllerError, carInEntanceGateway, carInExitGateway, carInRobotBay;
 uint8_t carInDGFalg, robotPhotoIsBlack=0;
-int8_t coolerTemp, heaterTemp, lll;
+int8_t coolerTemp, heaterTemp;
 int16_t readyDelay;
 uint32_t carInTimer;
 /* Definitions for impEntrTimer */
@@ -289,7 +288,7 @@ void gatePhotoHandler(){
 		}
 	}
 	/* END OF USER CODE Ворота въезд */
-	lll = osTimerIsRunning(gateINWaitTimerHandle);
+
 	/* USER CODE Ворота выезд */
 	/* Если флаг не установился, сенсор видит авто в проеме и таймер задержки сенсора не активен то стартуем таймер  */
 	if (!carInExitGateway && getPhotoOutSensor() && !osTimerIsRunning(PhotoOutDelayHandle)) {
@@ -323,7 +322,10 @@ void controllerReset(){
 	inProgress = 0;
 	controllerError=0;
 	readyFlag = 1;
-//	lightEffect = 1;
+	techBreack=0;
+	carInDGFalg=1;
+	osTimerStop(gateOUTWaitTimerHandle);
+	osTimerStop(gateINWaitTimerHandle);
 	setRobotNoChasis(chasisDisabled);
 //	PRINT("CONTROLLER RESET\r\n");
 }
