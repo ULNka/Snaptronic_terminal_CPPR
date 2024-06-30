@@ -27,17 +27,17 @@ enum {
 	check,
 	reset
 };
-
+extern osStatus_t statuss;
 extern uint16_t usbHoldingRegister[16];
 extern uint8_t usbDiscreteRegister[9];
 extern modbusHandler_t ModbusH2;
 extern modbus_t robot[2], gateIN[2], gateOUT[2], remote[2]; //Структуры для Modbus Master
 extern uint8_t lightEffect;
 const uint16_t impTime = 1500; //Длительность сигнального импульса, мс
-uint8_t timeToEntance, timeToExit, gateMode, startDelay, gateOutputFlag;
+uint8_t timeToEntance=31, timeToExit, gateMode, startDelay, gateOutputFlag;
 uint8_t isReady = 1, readyFlag=1, inProgress, isFinish, pause, chasisDisabled, techBreack, controllerError, carInEntanceGateway, carInExitGateway, carInRobotBay;
 uint8_t carInDGFalg, robotPhotoIsBlack=0;
-int8_t coolerTemp, heaterTemp;
+int8_t coolerTemp, heaterTemp, lll;
 int16_t readyDelay;
 uint32_t carInTimer;
 /* Definitions for impEntrTimer */
@@ -172,9 +172,10 @@ void startProgramm(uint8_t programm){
 		osDelay(startDelay * 1000);
 		inProgress = 1;
 		readyFlag = 0;
+		lightEffect = 4;
 		if (gateMode == 1 || gateMode == 2) {
 			gateInOpenAuto();
-			lightEffect = 4;
+
 		}
 		osDelay(3000); //Задержка запуска программы робота
 		setRobotNoChasis(chasisDisabled);
@@ -182,25 +183,25 @@ void startProgramm(uint8_t programm){
 
 	switch (programm) {
 			  case 1:
-				  PRINT("START PROGRAMM 1\r\n");
+//				  PRINT("START PROGRAMM 1\r\n");
 				  setRobotProg1(1);
 				  osDelay(impTime);
 				  setRobotProg1(0);
 				  break;
 			  case 2:
-				  PRINT("START PROGRAMM 2\r\n");
+//				  PRINT("START PROGRAMM 2\r\n");
 				  setRobotProg2(1);
 				  osDelay(impTime);
 				  setRobotProg2(0);
 				  break;
 			  case 3:
-				  PRINT("START PROGRAMM 3\r\n");
+//				  PRINT("START PROGRAMM 3\r\n");
 				  setRobotProg3(1);
 				  osDelay(impTime);
 				  setRobotProg3(0);
 				  break;
 			  default:
-				  PRINT("INVALID DATA\r\n");
+//				  PRINT("INVALID DATA\r\n");
 				  controllerReset();
 				  break;
 				}
@@ -237,14 +238,29 @@ void robotHandler(){
 	/* END OF CODE Обработка сигналов "Окончание мойки" */
 
 	/* CODE Генератор статуса "Готов" */
-	if (!controllerError && readyFlag && !carInRobotBay && !pause){ //Переделать!
+	if(controllerError){
+		isReady = 0;
+		setRedTrafficLight();
+		lightEffect = 7;
+	}
+	if(techBreack){
+		isReady = 0;
+		setOFFTrafficLight();
+		lightEffect = 3;
+	}else if(robotPhotoIsBlack){
+		isReady = 0;
+		setRedTrafficLight();
+		lightEffect = 2;
+	}else if (!controllerError && readyFlag && !carInRobotBay && !pause){ //Переделать!
 		isReady = 1;
 		setGreenTrafficLight();
 		lightEffect = 1;
 	} else {
 		isReady = 0;
+//		lightEffect = 2;
 		if(!inProgress) setRedTrafficLight();
 	}
+
 	/* END OF CODE Генератор статуса "Готов" */
 
 	/* Сетофор */
@@ -265,6 +281,7 @@ void gatePhotoHandler(){
 	/* Если флаг установился и проем освободился то останавливаем таймер ожидания авто и закрываем ворота */
 	if (carInEntanceGateway && !getPhotoInSensor()) {
 		carInEntanceGateway = 0;
+
 		if(osTimerIsRunning(gateINWaitTimerHandle)){
 		osTimerStop(gateINWaitTimerHandle);
 		osDelay(1000);
@@ -272,7 +289,7 @@ void gatePhotoHandler(){
 		}
 	}
 	/* END OF USER CODE Ворота въезд */
-
+	lll = osTimerIsRunning(gateINWaitTimerHandle);
 	/* USER CODE Ворота выезд */
 	/* Если флаг не установился, сенсор видит авто в проеме и таймер задержки сенсора не активен то стартуем таймер  */
 	if (!carInExitGateway && getPhotoOutSensor() && !osTimerIsRunning(PhotoOutDelayHandle)) {
@@ -308,7 +325,7 @@ void controllerReset(){
 	readyFlag = 1;
 //	lightEffect = 1;
 	setRobotNoChasis(chasisDisabled);
-	PRINT("CONTROLLER RESET\r\n");
+//	PRINT("CONTROLLER RESET\r\n");
 }
 
 void gateInOpenAuto(){
@@ -394,7 +411,10 @@ void photoDelayCallback(void *argument)
 		carInDGFalg=1;
 		carInTimer = HAL_GetTick();
 		carInEntanceGateway=1;
-		if(inProgress) setRedTrafficLight();
+		if(inProgress) {
+			lightEffect = 2;
+			setRedTrafficLight();
+		}
 	}
   /* USER CODE END photoDelayCallback */
 }

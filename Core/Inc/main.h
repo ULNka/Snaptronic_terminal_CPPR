@@ -37,7 +37,7 @@ extern "C" {
 
 /* Exported types ------------------------------------------------------------*/
 /* USER CODE BEGIN ET */
-struct dataMain {
+typedef struct dataMain {
 	uint8_t timeToEntance;
 	uint8_t timeToExit;
 	uint8_t gateMode; //0 - выкл, 1 - авто, 2- только въезд, 3-только выезд

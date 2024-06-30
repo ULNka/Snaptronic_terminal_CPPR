@@ -106,7 +106,7 @@ const osThreadAttr_t UsbSlave_attributes = {
 osThreadId_t RobotProcessHandle;
 const osThreadAttr_t RobotProcess_attributes = {
   .name = "RobotProcess",
-  .stack_size = 1024 * 4,
+  .stack_size = 2048 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for ClimatControl */
@@ -225,6 +225,9 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
     	adcDataIsReady = 1;
     }
 }
+void vApplicationStackOverflowHook( TaskHandle_t xTask, char *pcTaskName ){
+	printf("we have a problem...");
+}
 /* USER CODE END 0 */
 
 /**
@@ -278,7 +281,8 @@ struct dataMain settings;
   settings.gateMode=1;
   settings.coolerTemp=30;
   settings.heaterTemp = 5;
-  timeToEntance = settings.timeToEntance;
+//  timeToEntance = settings.timeToEntance;
+  timeToEntance = 30;
   timeToExit = settings.timeToExit;
   startDelay = settings.startDelay;
   gateMode = settings.gateMode;
@@ -947,8 +951,8 @@ void StartSysUtil(void *argument)
   for(;;)
   {	HAL_GPIO_TogglePin(PWRLED_GPIO_Port, PWRLED_Pin);
 	HAL_IWDG_Refresh(&hiwdg);
-	printf("Hello from SWO 2");
-    osDelay(800);
+//	printf("Hello from SWO 2");
+    lll = osDelay(800);
   }
   /* USER CODE END StartSysUtil */
 }
@@ -1042,7 +1046,7 @@ void StartRobotProcess(void *argument)
 
 	  usbDiscreteRegister[6] = isReady;
 	  usbDiscreteRegister[7] = controllerError;
-	  usbDiscreteRegister[8] = 0; // технический перерыв
+	  usbDiscreteRegister[8] = techBreack; // технический перерыв
 
     osDelay(1);
   }
