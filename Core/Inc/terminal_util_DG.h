@@ -35,8 +35,8 @@ extern modbus_t robot[2], gateIN[2], gateOUT[2], remote[2]; //Структуры
 extern uint8_t lightEffect;
 const uint16_t impTime = 1500; //Длительность сигнального импульса, мс
 uint8_t timeToEntance, timeToExit, gateMode, startDelay, gateOutputFlag;
-uint8_t isReady = 1, readyFlag=1, inProgress, isFinish, pause, chasisDisabled, controllerError, carInEntanceGateway, carInExitGateway, carInRobotBay;
-uint8_t carInDGFalg;
+uint8_t isReady = 1, readyFlag=1, inProgress, isFinish, pause, chasisDisabled, techBreack, controllerError, carInEntanceGateway, carInExitGateway, carInRobotBay;
+uint8_t carInDGFalg, robotPhotoIsBlack=0;
 int8_t coolerTemp, heaterTemp;
 int16_t readyDelay;
 uint32_t carInTimer;
@@ -215,12 +215,14 @@ void robotHandler(){
 	if(osTimerIsRunning(ONcarInTimerHandle) && !getCarIsideStatus()){
 		osTimerStop(ONcarInTimerHandle);
 	}
-	if(carInRobotBay && !getCarIsideStatus() && !inProgress) {
-		carInRobotBay = 0;
+	if(robotPhotoIsBlack && !getCarIsideStatus() ) {
+		robotPhotoIsBlack = 0;
+//		carInRobotBay = 0;
 	}
 
 	if(carInDGFalg && (HAL_GetTick()-carInTimer >= 60000)) carInDGFalg = 0; // Таймаут автосброса флага ожидания авто в боксе
-	if(inProgress && getCarIsideStatus()) carInRobotBay = 1; // Зачем я это сделал??
+
+	//if(inProgress && getCarIsideStatus()) carInRobotBay = 1; // Зачем я это сделал?? Если не сработал фотоэлемент. Пока без этого
 	/* END OF CODE Обработка сигналов "Автомобиль в боксе" */
 
 	/* CODE Обработка сигналов "Окончание мойки" */
@@ -241,6 +243,7 @@ void robotHandler(){
 		lightEffect = 1;
 	} else {
 		isReady = 0;
+		if(!inProgress) setRedTrafficLight();
 	}
 	/* END OF CODE Генератор статуса "Готов" */
 
@@ -283,12 +286,16 @@ void gatePhotoHandler(){
 	/* Если флаг установился и проем освободился то останавливаем таймер  ожидания авто и закрываем ворота */
 	if (carInExitGateway && !getPhotoOutSensor()) {
 		carInExitGateway = 0;
+		if(carInRobotBay){
+		carInRobotBay = 0;
+		}
 		if(osTimerIsRunning(gateOUTWaitTimerHandle)){
 		osTimerStop(gateOUTWaitTimerHandle);
 		osDelay(1000);
 		gateOutClosedAuto();
 		}
 		if(isFinish) osTimerStart(readyDelayTimerHandle, readyDelay);
+
 	}
 	/* END OF USER CODE Ворота выезд */
 
@@ -384,6 +391,8 @@ void photoDelayCallback(void *argument)
 {
   /* USER CODE BEGIN photoDelayCallback */
 	if(getPhotoInSensor()){
+		carInDGFalg=1;
+		carInTimer = HAL_GetTick();
 		carInEntanceGateway=1;
 		if(inProgress) setRedTrafficLight();
 	}
@@ -408,7 +417,11 @@ void ONcarInCallback(void *argument)
   /* USER CODE BEGIN ONcarInCallback */
 	chasisDisabled = 0;
 	setRobotNoChasis(chasisDisabled);
-	if(carInDGFalg)	carInRobotBay = 1;
+	robotPhotoIsBlack = 1;
+	if(carInDGFalg)	{
+		carInDGFalg = 0;
+		carInRobotBay = 1;
+	}
 	lightEffect = 2;
 //	setRedTrafficLight();
   /* USER CODE END ONcarInCallback */
@@ -431,6 +444,7 @@ void PhotoOutDelayCallback(void *argument)
 	if (getPhotoOutSensor()) {
 		carInExitGateway = 1;
 	}
+
   /* USER CODE END PhotoOutDelayCallback */
 }
 

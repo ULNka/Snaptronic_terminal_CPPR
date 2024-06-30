@@ -34,7 +34,7 @@ extern modbusHandler_t ModbusH2;
 extern modbus_t robot[2], gateIN[2], gateOUT[2], remote[2]; //Структуры для Modbus Master
 
 const uint16_t impTime = 1500; //Длительность сигнального импульса, мс
-uint8_t timeToEntance, timeToExit, gateMode, startDelay, gateOutputFlag;
+uint8_t timeToEntance, timeToExit, gateMode, startDelay, gateOutputFlag, autoOpenFlag, autoCloseFlag;
 uint8_t isReady = 1, readyFlag=1, inProgress, isFinish, pause, chasisDisabled, controllerError, carInEntanceGateway, carInExitGateway, carInRobotBay;
 
 int8_t coolerTemp, heaterTemp;
@@ -245,11 +245,10 @@ void robotHandler(){
 void gatePhotoHandler(){
 	/* USER CODE Ворота въезд */
 	/* Если флаг не установился, сенсор видит авто в проеме и таймер задержки сенсора не активен то стартуем таймер  */
-	if (!carInEntanceGateway && getPhotoInSensor()
-			&& !osTimerIsRunning(photoDelayTimerHandle)) {
-		if (osTimerIsRunning(gateINWaitTimerHandle))
+	if (!carInEntanceGateway && getPhotoInSensor() && !osTimerIsRunning(photoDelayTimerHandle)) {
+//		if (osTimerIsRunning(gateINWaitTimerHandle))
 			osTimerStart(photoDelayTimerHandle, 2000);
-	}
+//	}
 	/* Если не видит авто в проеме и таймер задержки сенсора активен то останавливаем таймер  */
 	if (osTimerIsRunning(photoDelayTimerHandle) && !getPhotoInSensor()) {
 		osTimerStop (photoDelayTimerHandle);
@@ -258,6 +257,7 @@ void gatePhotoHandler(){
 	if (carInEntanceGateway && !getPhotoInSensor()) {
 		carInEntanceGateway = 0;
 		osTimerStop(gateINWaitTimerHandle);
+		osDelay(1000);
 		gateInClosedAuto();
 	}
 	/* END OF USER CODE Ворота въезд */
@@ -277,6 +277,7 @@ void gatePhotoHandler(){
 	if (carInExitGateway && !getPhotoOutSensor()) {
 		carInExitGateway = 0;
 		osTimerStop(gateOUTWaitTimerHandle);
+		osDelay(1000);
 		gateOutClosedAuto();
 		osTimerStart(readyDelayTimerHandle, readyDelay);
 	}

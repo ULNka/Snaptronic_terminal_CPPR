@@ -14,6 +14,8 @@
 #define BACKLIGHT (1 << 3)         // управление подсветкой
 #define LCD_DELAY_MS 2
 
+extern I2C_HandleTypeDef hi2c1;
+
 void I2C_send(uint8_t data, uint8_t flags) {
 	HAL_StatusTypeDef res;
 	/*for (;;) {                                               // бесконечный цикл
@@ -31,8 +33,7 @@ void I2C_send(uint8_t data, uint8_t flags) {
 	data_arr[2] = lo | flags | BACKLIGHT | PIN_EN;
 	data_arr[3] = lo | flags | BACKLIGHT;
 
-	HAL_I2C_Master_Transmit(&hi2c1, LCD_ADDR, data_arr, sizeof(data_arr),
-			HAL_MAX_DELAY);
+	HAL_I2C_Master_Transmit(&hi2c1, LCD_ADDR, data_arr, sizeof(data_arr), HAL_MAX_DELAY);
 	//HAL_I2C_Master_Transmit_DMA(&hi2c1, LCD_ADDR, data_arr, sizeof(data_arr));
 	HAL_Delay (LCD_DELAY_MS);
 }

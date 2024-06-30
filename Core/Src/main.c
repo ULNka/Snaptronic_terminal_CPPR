@@ -24,6 +24,7 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "stdio.h"
 #include "init.h"
 #include "lcd1602.h"
 #include "usb_modbus.h"
@@ -198,6 +199,13 @@ int16_t map(int16_t input, int16_t inMin, int16_t inMax, int16_t outMin,
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+int _write(int file, char *ptr, int len){
+	int i=0;
+	for(i=0; i<len; i++){
+		ITM_SendChar((*ptr++));
+		return len;
+	}
+}
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
         if(wig_flag_inrt && GPIO_Pin == D0)
@@ -293,6 +301,7 @@ struct dataMain settings;
   ModbusInit(&ModbusH2);
   //Start capturing traffic on serial Port
   ModbusStart(&ModbusH2);
+  printf("Hello from SWO");
   /* USER CODE END 2 */
 
   /* Init scheduler */
@@ -472,7 +481,7 @@ static void MX_ADC1_Init(void)
   */
   sConfig.Channel = ADC_CHANNEL_9;
   sConfig.Rank = ADC_REGULAR_RANK_1;
-  sConfig.SamplingTime = ADC_SAMPLETIME_41CYCLES_5;
+  sConfig.SamplingTime = ADC_SAMPLETIME_71CYCLES_5;
   if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
   {
     Error_Handler();
@@ -482,7 +491,6 @@ static void MX_ADC1_Init(void)
   */
   sConfig.Channel = ADC_CHANNEL_8;
   sConfig.Rank = ADC_REGULAR_RANK_2;
-  sConfig.SamplingTime = ADC_SAMPLETIME_41CYCLES_5;
   if (HAL_ADC_ConfigChannel(&hadc1, &sConfig) != HAL_OK)
   {
     Error_Handler();
@@ -939,6 +947,7 @@ void StartSysUtil(void *argument)
   for(;;)
   {	HAL_GPIO_TogglePin(PWRLED_GPIO_Port, PWRLED_Pin);
 	HAL_IWDG_Refresh(&hiwdg);
+	printf("Hello from SWO 2");
     osDelay(800);
   }
   /* USER CODE END StartSysUtil */
