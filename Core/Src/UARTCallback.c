@@ -10,8 +10,9 @@
 #include "task.h"
 #include "main.h"
 #include "Modbus.h"
-
-
+extern UART_HandleTypeDef huart4;
+extern uint8_t dataUartBuffer[];
+extern uint16_t  dataUartSize;
 /**
  * @brief
  * This is the callback for HAL interrupts of UART TX used by Modbus library.
@@ -58,37 +59,40 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
  * Modbus functionality.
  * @ingroup UartHandle UART HAL handler
  */
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef *UartHandle)
-{
-	BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-
-	/* Modbus RTU RX callback BEGIN */
-    int i;
-    for (i = 0; i < numberHandlers; i++ )
-    {
-    	if (mHandlers[i]->port == UartHandle  )
-    	{
-
-    		if(mHandlers[i]->xTypeHW == USART_HW)
-    		{
-    			RingAdd(&mHandlers[i]->xBufferRX, mHandlers[i]->dataRX);
-    			HAL_UART_Receive_IT(mHandlers[i]->port, &mHandlers[i]->dataRX, 1);
-    			xTimerResetFromISR(mHandlers[i]->xTimerT35, &xHigherPriorityTaskWoken);
-    		}
-    		break;
-    	}
-    }
-    portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
-
-	/* Modbus RTU RX callback END */
-
-	/*
-	 * Here you should implement the callback code for other UARTs not used by Modbus
-	 *
-	 *
-	 * */
-
-}
+//void HAL_UART_RxCpltCallback(UART_HandleTypeDef *UartHandle)
+//{
+//	BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+//
+//	/* Modbus RTU RX callback BEGIN */
+//    int i;
+//    for (i = 0; i < numberHandlers; i++ )
+//    {
+//    	if (mHandlers[i]->port == UartHandle  )
+//    	{
+//
+//    		if(mHandlers[i]->xTypeHW == USART_HW)
+//    		{
+//    			RingAdd(&mHandlers[i]->xBufferRX, mHandlers[i]->dataRX);
+//    			HAL_UART_Receive_IT(mHandlers[i]->port, &mHandlers[i]->dataRX, 1);
+//    			xTimerResetFromISR(mHandlers[i]->xTimerT35, &xHigherPriorityTaskWoken);
+//    		}
+//    		break;
+//    	}
+//    }
+//    portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
+//
+//	/* Modbus RTU RX callback END */
+//
+//	/*
+//	 * Here you should implement the callback code for other UARTs not used by Modbus
+//	 *
+//	 *
+//	 * */
+//
+//
+//
+//
+//}
 
 
 #if  ENABLE_USART_DMA ==  1
@@ -128,6 +132,13 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
 void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
 {
 	    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+	      if(huart == &huart4)
+	        {
+	          dataUartSize = Size;
+//	      	  HAL_UART_AbortReceive(&huart4);
+	//        HAL_UART_Transmit_IT(&huart4, dataUartBuffer, Size);
+	          HAL_UARTEx_ReceiveToIdle_IT(&huart4, dataUartBuffer, 5);
+	        }
 		/* Modbus RTU RX callback BEGIN */
 //	    HAL_GPIO_TogglePin(LED1_GPIO_Port, LED1_Pin);
 	    int i;
@@ -159,6 +170,8 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
 	    	}
 	    }
 	    portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
+
+
 }
 
 #endif

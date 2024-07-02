@@ -317,13 +317,113 @@ void gatePhotoHandler(){
 
 }
 
+void remoteHandler(){
+	static uint8_t pauseFalg, resetFalg, gateInButtonOpenFlag, gateInButtonCloseFlag, gateOutButtonOpenFlag, gateOutButtonCloseFlag, handBoxButtonFlag;
+	static uint32_t resetButtonTimer, handBoxTimer;
+	/* Индикаторы концевиков ворот */
+setInGreen(!getClosedInSw());
+setOutGreen(!getClosedOutSw());
+
+	/* Установка/снятие паузы */
+if(!pauseFalg && getPauseButton()){
+	pauseFalg = 1;
+	pause = !pause;
+}
+if(pauseFalg && !getPauseButton()){
+	pauseFalg = 0;
+}
+
+	/* Кнопка сброса ошибки и режима перерыва */
+if (!resetFalg && getResetButton()){
+	resetButtonTimer = HAL_GetTick();
+	resetFalg = 1;
+}
+if(resetFalg && getResetButton() && (HAL_GetTick() - resetButtonTimer >= 3000)){
+	techBreack = 1;
+}
+if(resetFalg && !getResetButton() && (HAL_GetTick() - resetButtonTimer < 3000)){
+	controllerReset();
+	resetFalg=0;
+}
+
+/* кнопки управления воротами */
+	/* вьезд открыть*/
+if(!gateInButtonOpenFlag && getEntranceOpenButton()){
+	gateInButtonOpenFlag = 1;
+	setGateInOpen(1);
+}
+if(gateInButtonOpenFlag && !getEntranceOpenButton()){
+	gateInButtonOpenFlag = 0;
+	setGateInOpen(0);
+}
+	/* вьезд закрыть*/
+if(!gateInButtonCloseFlag && getEntranceCloseButton()){
+	gateInButtonCloseFlag = 1;
+	setGateInClosed(1);
+}
+if(gateInButtonCloseFlag && !getEntranceCloseButton()){
+	gateInButtonCloseFlag = 0;
+	setGateInClosed(0);
+}
+
+	/* выезд открыть */
+if(!gateOutButtonOpenFlag && getExitOpenButton()){
+	gateOutButtonOpenFlag = 1;
+	setGateOutOpen(1);
+}
+if(gateOutButtonOpenFlag && !getExitOpenButton()){
+	gateOutButtonOpenFlag = 0;
+	setGateOutOpen(0);
+}
+
+	/* выезд закрыть */
+if(!gateOutButtonCloseFlag && getExitCloseButton()){
+	gateOutButtonCloseFlag = 1;
+	setGateOutClosed(1);
+}
+if(gateOutButtonCloseFlag && !getExitCloseButton()){
+	gateOutButtonCloseFlag = 0;
+	setGateOutClosed(0);
+}
+/* Переключатель режима ворот */
+if(getGateInAutoMode() && getGateOutAutoMode()) gateMode = 1;
+else if(getGateInAutoMode() && !getGateOutAutoMode()) gateMode = 2;
+else if(!getGateInAutoMode() && getGateOutAutoMode()) gateMode = 3;
+else gateMode = 0;
+
+
+/* кнопка управления светофором ручной мойки */
+	if (!handBoxButtonFlag && getTrafficLightButton()) {
+		handBoxTimer = HAL_GetTick();
+		handBoxButtonFlag = 1;
+	}
+
+	if (handBoxButtonFlag && getTrafficLightButton() && (HAL_GetTick() - handBoxTimer >= 3000)) {
+		handBoxButtonFlag = 1;
+		setHandBoxRemote(1);
+		setHandRed(0);
+		setHandGreen(0);
+	}
+
+	if (handBoxButtonFlag && !getTrafficLightButton() && (HAL_GetTick() - handBoxTimer < 3000)) {
+		handBoxButtonFlag = 0;
+		if (getHandBoxGreen()) {
+			setHandBoxRemote(1);
+			setHandRed(1);
+		} else {
+			setHandBoxRemote(0);
+		}
+	}
+}
+
 void controllerReset(){
+	pause = 0;
 	chasisDisabled=0;
 	inProgress = 0;
 	controllerError=0;
 	readyFlag = 1;
 	techBreack=0;
-	carInDGFalg=1;
+	carInDGFalg=0;
 	osTimerStop(gateOUTWaitTimerHandle);
 	osTimerStop(gateINWaitTimerHandle);
 	setRobotNoChasis(chasisDisabled);
@@ -353,17 +453,31 @@ void gateOutClosedAuto(){
 void setGreenTrafficLight(){
 	setGateInRed(0);
 	setGateInGreen(1);
+//#ifdef REMOTE
+	setRobotRed(0);
+	setRobotGreen(1);
+//#endif
 }
 
 void setRedTrafficLight(){
 	setGateInGreen(0);
 	setGateInRed(1);
+//#ifdef REMOTE
+	setRobotGreen(0);
+	setRobotRed(1);
+//#endif
 }
 
 void setOFFTrafficLight(){
 	setGateInGreen(0);
 	setGateInRed(0);
+#ifdef REMOTE
+	setRobotGreen(0);
+	setRobotRed(0);
+#endif
 }
+
+
 
 /* impEntrCallback function */
 void impEntrCallback(void *argument)

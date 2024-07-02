@@ -66,19 +66,28 @@ uint8_t getClosedInSw(){
 uint8_t getOpenInSw(){
 	 return bitRead(gateINInputs[0], 2);
 }
+uint8_t getPhotoHandBox(){
+	 return bitRead(gateINInputs[0], 3);
+}
+uint8_t getHandBoxGreen(){
+	 return bitRead(gateINInputs[0], 8);
+}
+uint8_t getHandBoxRed(){
+	 return bitRead(gateINInputs[0], 9);
+}
 void setGateInOpen(uint8_t val){
 	bitWrite(gateINOutputs[0], 0, val);
 }
 void setGateInClosed(uint8_t val){
 	bitWrite(gateINOutputs[0], 1, val);
 }
-void setGateInStop(uint8_t val){
+void setGateInGreen(uint8_t val){
 	bitWrite(gateINOutputs[0], 2, val);
 }
-void setGateInGreen(uint8_t val){
+void setGateInRed(uint8_t val){
 	bitWrite(gateINOutputs[0], 3, val);
 }
-void setGateInRed(uint8_t val){
+void setGateInStop(uint8_t val){
 	bitWrite(gateINOutputs[0], 4, val);
 }
 void setGateInHandGreen(uint8_t val){
@@ -86,6 +95,9 @@ void setGateInHandGreen(uint8_t val){
 }
 void setGateInHandRed(uint8_t val){
 	bitWrite(gateINOutputs[0], 6, val);
+}
+void setHandBoxRemote(uint8_t val){
+	bitWrite(gateINOutputs[0], 8, val);
 }
 
 /* Модуль ворот выезд */
@@ -108,4 +120,57 @@ void setGateOutStop(uint8_t val){
 	bitWrite(gateOUTOutnputs[0], 2, val);
 }
 
+/* Модуль пульта */
+uint8_t getPauseButton(){
+	 return bitRead(remoteInputs[0], 0);
+}
+uint8_t getExitOpenButton(){
+	 return bitRead(remoteInputs[0], 1);
+}
+uint8_t getExitCloseButton(){
+	 return bitRead(remoteInputs[0], 2);
+}
+uint8_t getResetButton(){
+	 return bitRead(remoteInputs[0], 3);
+}
+uint8_t getGateInAutoMode(){
+	 return bitRead(remoteInputs[0], 4);
+}
+uint8_t getGateOutAutoMode(){
+	 return bitRead(remoteInputs[0], 5);
+}
+uint8_t getEntranceOpenButton(){
+	 return bitRead(remoteInputs[0], 6);
+}
+uint8_t getEntranceCloseButton(){
+	 return bitRead(remoteInputs[0], 7);
+}
+uint8_t getTrafficLightButton(){
+	 return bitRead(remoteInputs[0], 8);
+}
+
+void setOutGreen(uint8_t val){
+	bitWrite(remoteOutputs[0], 0, val);
+}
+void setOutRed(uint8_t val){
+	bitWrite(remoteOutputs[0], 1, val);
+}
+void setInGreen(uint8_t val){
+	bitWrite(remoteOutputs[0], 2, val);
+}
+void setInRed(uint8_t val){
+	bitWrite(remoteOutputs[0], 3, val);
+}
+void setRobotGreen(uint8_t val){
+	bitWrite(remoteOutputs[0], 4, val);
+}
+void setRobotRed(uint8_t val){
+	bitWrite(remoteOutputs[0], 5, val);
+}
+void setHandGreen(uint8_t val){
+	bitWrite(remoteOutputs[0], 6, val);
+}
+void setHandRed(uint8_t val){
+	bitWrite(remoteOutputs[0], 7, val);
+}
 #endif /* INC_SLAVEDEVICES_H_ */

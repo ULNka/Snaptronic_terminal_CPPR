@@ -44,6 +44,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define REMOTE 1
 #define MASTER_KEY 6393037			//Код мастер ключа
 #define FIRST_KEY 6393038			//Код первого ключа
 #define D0        D0_Pin
@@ -71,6 +72,8 @@ TIM_HandleTypeDef htim4;
 UART_HandleTypeDef huart4;
 UART_HandleTypeDef huart5;
 UART_HandleTypeDef huart3;
+DMA_HandleTypeDef hdma_uart4_rx;
+DMA_HandleTypeDef hdma_uart4_tx;
 DMA_HandleTypeDef hdma_usart3_rx;
 DMA_HandleTypeDef hdma_usart3_tx;
 
@@ -106,7 +109,7 @@ const osThreadAttr_t UsbSlave_attributes = {
 osThreadId_t RobotProcessHandle;
 const osThreadAttr_t RobotProcess_attributes = {
   .name = "RobotProcess",
-  .stack_size = 2048 * 4,
+  .stack_size = 1024 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for ClimatControl */
@@ -149,6 +152,8 @@ const osSemaphoreAttr_t usbSem_attributes = {
 };
 /* USER CODE BEGIN PV */
 uint8_t lightEffect=1;		//0-нет связи, 1-свободно, 2-занято, 3-техобслуживание, 4-заезд авто, 5-открывание дверки, 6-двкерка открыта
+uint8_t dataUartBuffer[8];
+uint16_t dataUartSize;
 volatile uint8_t adcDataIsReady=0;
 volatile uint8_t wig_flag_inrt = 1;
 uint16_t adc[2];
@@ -199,13 +204,13 @@ int16_t map(int16_t input, int16_t inMin, int16_t inMax, int16_t outMin,
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-int _write(int file, char *ptr, int len){
-	int i=0;
-	for(i=0; i<len; i++){
-		ITM_SendChar((*ptr++));
-		return len;
-	}
-}
+//int _write(int file, char *ptr, int len){
+//	int i=0;
+//	for(i=0; i<len; i++){
+//		ITM_SendChar((*ptr++));
+//		return len;
+//	}
+//}
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
         if(wig_flag_inrt && GPIO_Pin == D0)
@@ -228,6 +233,7 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 void vApplicationStackOverflowHook( TaskHandle_t xTask, char *pcTaskName ){
 	printf("we have a problem...");
 }
+
 /* USER CODE END 0 */
 
 /**
@@ -295,7 +301,7 @@ struct dataMain settings;
   ModbusH2.port =  &huart3;
   ModbusH2.u8id = 0; // For master it must be 0
   ModbusH2.u16timeOut = 200;
-  ModbusH2.EN_Port = NULL;
+//  ModbusH2.EN_Port = NULL;
   ModbusH2.EN_Port = RE2_GPIO_Port;
   ModbusH2.EN_Pin = RE2_Pin;
   ModbusH2.u16regs = ModbusDATA;
@@ -305,7 +311,9 @@ struct dataMain settings;
   ModbusInit(&ModbusH2);
   //Start capturing traffic on serial Port
   ModbusStart(&ModbusH2);
-  printf("Hello from SWO");
+//  HAL_UARTEx_Receive_DMA(&huart4, dataUartBuffer, 5);
+//  HAL_UART_Receive_IT(&huart4, dataUartBuffer, 5);
+  HAL_UARTEx_ReceiveToIdle_IT(&huart4, dataUartBuffer, 5);
   /* USER CODE END 2 */
 
   /* Init scheduler */
@@ -685,7 +693,7 @@ static void MX_UART4_Init(void)
 
   /* USER CODE END UART4_Init 1 */
   huart4.Instance = UART4;
-  huart4.Init.BaudRate = 115200;
+  huart4.Init.BaudRate = 57600;
   huart4.Init.WordLength = UART_WORDLENGTH_8B;
   huart4.Init.StopBits = UART_STOPBITS_1;
   huart4.Init.Parity = UART_PARITY_NONE;
@@ -776,6 +784,7 @@ static void MX_DMA_Init(void)
 
   /* DMA controller clock enable */
   __HAL_RCC_DMA1_CLK_ENABLE();
+  __HAL_RCC_DMA2_CLK_ENABLE();
 
   /* DMA interrupt init */
   /* DMA1_Channel1_IRQn interrupt configuration */
@@ -793,6 +802,12 @@ static void MX_DMA_Init(void)
   /* DMA1_Channel7_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA1_Channel7_IRQn, 5, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel7_IRQn);
+  /* DMA2_Channel3_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA2_Channel3_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(DMA2_Channel3_IRQn);
+  /* DMA2_Channel4_5_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA2_Channel4_5_IRQn, 5, 0);
+  HAL_NVIC_EnableIRQ(DMA2_Channel4_5_IRQn);
 
 }
 
@@ -951,8 +966,9 @@ void StartSysUtil(void *argument)
   for(;;)
   {	HAL_GPIO_TogglePin(PWRLED_GPIO_Port, PWRLED_Pin);
 	HAL_IWDG_Refresh(&hiwdg);
+
 //	printf("Hello from SWO 2");
-    lll = osDelay(800);
+osDelay(800);
   }
   /* USER CODE END StartSysUtil */
 }
@@ -1043,6 +1059,10 @@ void StartRobotProcess(void *argument)
 	  dataFromUsbProcessing();
 	  gatePhotoHandler();
 	  robotHandler();
+#ifdef REMOTE
+	  remoteHandler();
+#endif
+
 
 	  usbDiscreteRegister[6] = isReady;
 	  usbDiscreteRegister[7] = controllerError;
@@ -1080,7 +1100,7 @@ void StartClimatControl(void *argument)
 	I2C_send(0b00000001, 0);   // очистка дисплея
 	/* Infinite loop */
 	for (;;) {
-		HAL_I2C_Master_Transmit(&hi2c1, sens_addr, &reqTemp, 1, 200); //Запрос температуры
+		HAL_I2C_Master_Transmit(&hi2c1, sens_addr, (uint8_t[]){reqTemp}, 1, 200); //Запрос температуры
 		HAL_I2C_Master_Receive(&hi2c1, sens_addr, data, 3, 200);
 
 		data[1] &= 0xFC;  //Зануляем последние два бита
@@ -1107,15 +1127,21 @@ void StartClimatControl(void *argument)
 				 sprintf((char*)bufTemp, "%.1f", temper); //Преобразуем float32 в строку(массив символов)
 				 sprintf((char*)bufHum, "%.1f", hum); // @suppress("Float formatting support")
 
-		if (temper <= 10.0f) {
+		if ((int16_t)temper <= heaterTemp) {
 			HAL_GPIO_WritePin(OUT6_GPIO_Port, OUT6_Pin, GPIO_PIN_SET);
-		} else if (temper >= 11.0f) {
+		} else if ((int16_t)temper >= heaterTemp+1) {
 			HAL_GPIO_WritePin(OUT6_GPIO_Port, OUT6_Pin, GPIO_PIN_RESET);
-		} else if (temper >= 30.0f) {
-			power = map((int16_t) temper, 30, 60, 200, 500);
-		} else if (temper <= 29.0f) {
-			power = 0;
 		}
+
+		if (temper > 50.0) {
+			power = 500;
+		} else if (temper > 40.0f) {
+			power = 400;
+		} else if (temper > 32.0f ){
+			power = 300;
+		} else if (temper > 28.0f ){
+			power = 200;
+		} else power = 0;
 
 		TIM4->CCR3 = power;
 
@@ -1331,10 +1357,18 @@ void StartLedStrip(void *argument)
   /* USER CODE BEGIN StartLedStrip */
 
   /* Infinite loop */
-  for(;;)
-  {
+	for (;;) {
+		if (dataUartSize > 4) {
 
-    osDelay(1);
+			if (dataUartBuffer[0] == 0x40  ) {
+				HAL_UART_Transmit_IT(&huart4, dataUartBuffer, dataUartSize);
+			}
+			dataUartSize = 0;
+			for(uint8_t i = 0; i<5; i++) {
+//				dataUartBuffer[i]=0;
+			}
+		}
+		osDelay(1);
   }
   /* USER CODE END StartLedStrip */
 }
@@ -1370,6 +1404,13 @@ void StartModbusMaster(void *argument)
 	gateOUT[0].u16reg = gateOUTInputs;
 	gateOUT[0].u32CurrentTask = ModbusMasterHandle;
 
+	remote[0].u8id = 10;
+	remote[0].u8fct = 3;
+	remote[0].u16RegAdd = 0x00;
+	remote[0].u16CoilsNo = 1;
+	remote[0].u16reg = remoteInputs;
+	remote[0].u32CurrentTask = ModbusMasterHandle;
+
 	robot2[1].u8id = 1;
 	robot2[1].u8fct = 6;
 	robot2[1].u16RegAdd = 0x01;
@@ -1390,6 +1431,13 @@ void StartModbusMaster(void *argument)
 	gateOUT[1].u16CoilsNo = 1;
 	gateOUT[1].u16reg = gateOUTOutnputs;
 	gateOUT[1].u32CurrentTask = ModbusMasterHandle;
+
+	remote[1].u8id = 10;
+	remote[1].u8fct = 6;
+	remote[1].u16RegAdd = 0x01;
+	remote[1].u16CoilsNo = 1;
+	remote[1].u16reg = remoteOutputs;
+	remote[1].u32CurrentTask = ModbusMasterHandle;
 //	osSemaphoreRelease(ModbusH2.ModBusSphrHandle);
   /* Infinite loop */
 	for (;;) {
@@ -1423,7 +1471,7 @@ void StartModbusMaster(void *argument)
 			osDelay(30);
 //			osSemaphoreRelease(ModbusH2.ModBusSphrHandle);
 //		}
-//
+/*
 //		if (osSemaphoreAcquire(ModbusH2.ModBusSphrHandle, 300) == pdTRUE) {
 			ModbusQuery(&ModbusH2, gateOUT[0]);
 			ulTaskNotifyTake(pdTRUE, portMAX_DELAY); // block until query finishes
@@ -1436,8 +1484,18 @@ void StartModbusMaster(void *argument)
 			ulTaskNotifyTake(pdTRUE, portMAX_DELAY); // block until query finishes
 //			osSemaphoreRelease(ModbusH2.ModBusSphrHandle);
 //		}
+			osDelay(30);
+*/
+#ifdef REMOTE
+			ModbusQuery(&ModbusH2, remote[0]);
+			ulTaskNotifyTake(pdTRUE, portMAX_DELAY); // block until query finishes
+			osDelay(30);
 
-		osDelay(30);
+			ModbusQuery(&ModbusH2, remote[1]);
+			ulTaskNotifyTake(pdTRUE, portMAX_DELAY); // block until query finishes
+			osDelay(30);
+
+#endif
 	}
   /* USER CODE END StartModbusMaster */
 }
