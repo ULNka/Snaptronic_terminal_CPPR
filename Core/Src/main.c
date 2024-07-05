@@ -33,6 +33,7 @@
 #include "terminal_util_DG.h"
 #include "GyverMotor.h"
 #include "wiegand.h"
+#include "ledUART.h"
 //#include "eeprom.h"
 /* USER CODE END Includes */
 
@@ -152,6 +153,7 @@ const osSemaphoreAttr_t usbSem_attributes = {
 };
 /* USER CODE BEGIN PV */
 uint8_t lightEffect=1;		//0-нет связи, 1-свободно, 2-занято, 3-техобслуживание, 4-заезд авто, 5-открывание дверки, 6-двкерка открыта
+uint8_t brightness = 205, doorMotorState = 0, alarm = 0, noUsbConnect = 0, rty;
 uint8_t dataUartBuffer[8];
 uint16_t dataUartSize;
 volatile uint8_t adcDataIsReady=0;
@@ -1063,7 +1065,6 @@ void StartRobotProcess(void *argument)
 	  remoteHandler();
 #endif
 
-
 	  usbDiscreteRegister[6] = isReady;
 	  usbDiscreteRegister[7] = controllerError;
 	  usbDiscreteRegister[8] = techBreack; // технический перерыв
@@ -1264,6 +1265,7 @@ void StartSecurityTask(void *argument)
 			}
 		}
 	}
+	doorMotorState = status;
 //---------Контроль тока мотора-------------//
 	if(status == RUN && (HAL_GetTick()-timer >= 2000)){
 		if(ain1 < nullCurrent) zeroCurrent = 1;
@@ -1334,8 +1336,14 @@ void StartSecurityTask(void *argument)
 	  if(!HAL_GPIO_ReadPin(IN2_GPIO_Port, IN2_Pin) && doorPosition == OPEN){
 		// toClose = 1;
 	  }
-	  if(doorPosition == OPEN) HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, 0);
-	  else HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, 1);
+	  if(doorPosition == OPEN) {
+		  HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, 0); // отладка
+		  HAL_GPIO_WritePin(OUT1_GPIO_Port, OUT1_Pin, 1); // реле подсветки
+	  } else {
+		  HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, 1);
+		  HAL_GPIO_WritePin(OUT1_GPIO_Port, OUT1_Pin, 0);
+	  }
+
 	  if(doorPosition == CLOSED) HAL_GPIO_WritePin(LED3_GPIO_Port, LED3_Pin, 0);
 	  else HAL_GPIO_WritePin(LED3_GPIO_Port, LED3_Pin, 1);
 
@@ -1359,14 +1367,23 @@ void StartLedStrip(void *argument)
   /* Infinite loop */
 	for (;;) {
 		if (dataUartSize > 4) {
+			if (dataUartBuffer[0] == 0x40 && checkLedCRC(dataUartBuffer, dataUartSize) ) {
 
-			if (dataUartBuffer[0] == 0x40  ) {
-				HAL_UART_Transmit_IT(&huart4, dataUartBuffer, dataUartSize);
+				switch (dataUartBuffer[2]){
+				case 1:
+//					lightEffect = rty; // отладка
+					if(noUsbConnect) lightEffect = 9;
+					if(doorMotorState) lightEffect = 5;
+					if(alarm) lightEffect = 8;
+					sendEffect(lightEffect);
+					break;
+				case 2:
+					if(alarm) brightness = 250;
+					sendBrightness(brightness);
+				}
 			}
 			dataUartSize = 0;
-			for(uint8_t i = 0; i<5; i++) {
-//				dataUartBuffer[i]=0;
-			}
+
 		}
 		osDelay(1);
   }
