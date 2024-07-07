@@ -45,7 +45,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-//#define REMOTE 1
+#define REMOTE
 #define MASTER_KEY 6393037			//Код мастер ключа
 #define FIRST_KEY 6393038			//Код первого ключа
 #define D0        D0_Pin
@@ -293,7 +293,7 @@ struct dataMain settings;
 
   ledInit();
   LCD_Init();
-  LCD_SendString("   AquaRobot ");
+  LCD_SendString("    AquaRobot ");
   HAL_ADCEx_Calibration_Start(&hadc1);
   HAL_ADC_Start_DMA(&hadc1, (uint32_t*)&adc, 2); // стартуем АЦП
   /* пока что так, затем реализовать чтение настроек из EEPROM */
@@ -1057,7 +1057,6 @@ void StartUsbSlave(void *argument)
 void StartRobotProcess(void *argument)
 {
   /* USER CODE BEGIN StartRobotProcess */
-//	uint8_t   value;
 
   /* Infinite loop */
   for(;;)
@@ -1093,7 +1092,7 @@ void StartClimatControl(void *argument)
 	const uint8_t reqReset = 0xFE;				//Команда сброса
 	const uint8_t reqTemp = 0xE3;				//Команда запроса температуры
 	const uint8_t reqHum = 0xE5;				//Команда запроса влажности
-	const uint8_t sens_addr = (0x40 << 1);
+	const uint8_t sens_addr = (0x40 << 1);		//Адрес датчика
 	HAL_I2C_Master_Transmit(&hi2c1, sens_addr, &reqReset, 1, 200); // Сброс встроенного датчика
 	uint16_t varTemp = 0;
 	uint16_t varHum = 0;
@@ -1101,17 +1100,15 @@ void StartClimatControl(void *argument)
 //	uint16_t tempVarArr[2];
 	/* Infinite loop */
 	for (;;) {
-		HAL_I2C_Master_Transmit(&hi2c1, sens_addr, &reqTemp, 1, 200); //Запрос температуры
-
-//		HAL_I2C_Master_Transmit(&hi2c1, sens_addr, (uint8_t[]){reqTemp}, 1, 200); //Запрос температуры
-		HAL_I2C_Master_Receive(&hi2c1, sens_addr, data, 3, 200);
+		HAL_I2C_Master_Transmit(&hi2c1, sens_addr, &reqTemp, 1, 150); //Запрос температуры
+		HAL_I2C_Master_Receive(&hi2c1, sens_addr, data, 3, 150);
 
 		data[1] &= 0xFC;  //Зануляем последние два бита
 		varTemp = data[1] | (data[0] << 8);
 		temper = (((float) varTemp / 65536) * 175.72) - 46.85; //Преобразуем в градусы по формуле из даташита
 
-		HAL_I2C_Master_Transmit(&hi2c1, sens_addr, &reqHum, 1, 200); //Запрос влажности
-		HAL_I2C_Master_Receive(&hi2c1, sens_addr, data, 3, 200);
+		HAL_I2C_Master_Transmit(&hi2c1, sens_addr, &reqHum, 1, 150); //Запрос влажности
+		HAL_I2C_Master_Receive(&hi2c1, sens_addr, data, 3, 150);
 
 		data[1] &= 0xFC; //Зануляем последние два бита
 		varHum = data[1] | (data[0] << 8);
@@ -1128,11 +1125,11 @@ void StartClimatControl(void *argument)
 				 usbHoldingRegister[13] = tempVarArr[0];*/
 
 				 sprintf((char*)bufTemp, "%.1f", temper); //Преобразуем float32 в строку(массив символов)
-				 sprintf((char*)bufHum, "%.1f", hum); // @suppress("Float formatting support")
+				 sprintf((char*)bufHum, "%.1f", hum); //Преобразуем float32 в строку(массив символов)
 
 		if ((int16_t)temper <= heaterTemp) {
 			HAL_GPIO_WritePin(OUT6_GPIO_Port, OUT6_Pin, GPIO_PIN_SET);
-		} else if ((int16_t)temper >= heaterTemp+1) {
+		} else if ((int16_t)temper >= heaterTemp+3) {
 			HAL_GPIO_WritePin(OUT6_GPIO_Port, OUT6_Pin, GPIO_PIN_RESET);
 		}
 
@@ -1186,9 +1183,10 @@ void StartSecurityTask(void *argument)
 		RUN
 	};
 	uint8_t status=0, direction, doorPosition, limitSwitch, switchRTig, switchFlag, zeroCurrent, overCurrent;
-	uint16_t speed;
-	HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_2);
-	uint32_t timer, beepTimer;
+	uint16_t speed, lightPower;
+	HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_2); //Сервопривод
+	HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_4); //Подсветка
+	uint32_t timer, beepTimer, lightTimer;
 	if (!HAL_GPIO_ReadPin(IN1_GPIO_Port, IN1_Pin)) { //Чекаем концевик замка двЁрки
 		doorPosition = CLOSED;
 	} else doorPosition = UNKNOWN;
@@ -1331,7 +1329,6 @@ void StartSecurityTask(void *argument)
 		if(ain1>ainMax) ainMax = ain1;
 
 		snprintf(trans_str, 13, "ADC %d   ", (uint16_t) ainMax);
-//		I2C_send(0b10000000, 0);   // переход на 1 строку
 		I2C_send(0b11000000, 0);   // переход на 2 строку
 		LCD_SendString((char*)trans_str);
 //-----------------------------------------//
@@ -1341,13 +1338,21 @@ void StartSecurityTask(void *argument)
 	  if(!HAL_GPIO_ReadPin(IN2_GPIO_Port, IN2_Pin) && doorPosition == OPEN){
 		// toClose = 1;
 	  }
-	  if(doorPosition == OPEN) {
-		  HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, 0); // отладка
-		  HAL_GPIO_WritePin(OUT1_GPIO_Port, OUT1_Pin, 1); // реле подсветки
-	  } else {
-		  HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, 1);
-		  HAL_GPIO_WritePin(OUT1_GPIO_Port, OUT1_Pin, 0);
-	  }
+		if (doorPosition == OPEN) {
+			HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, 0); // отладка
+			HAL_GPIO_WritePin(OUT1_GPIO_Port, OUT1_Pin, 1); // реле подсветки
+			if (lightPower <= htim4.Init.Period) {
+				lightPower+=10;
+			}
+
+		} else {
+			HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, 1);
+			HAL_GPIO_WritePin(OUT1_GPIO_Port, OUT1_Pin, 0);
+			if (lightPower > 0) {
+				lightPower-=10;
+			}
+		}
+		TIM4->CCR4 = lightPower;
 
 	  if(doorPosition == CLOSED) HAL_GPIO_WritePin(LED3_GPIO_Port, LED3_Pin, 0);
 	  else HAL_GPIO_WritePin(LED3_GPIO_Port, LED3_Pin, 1);
@@ -1371,14 +1376,12 @@ void StartLedStrip(void *argument)
 uint16_t dataUartSize;
   /* Infinite loop */
 	for (;;) {
-//		osMessageQueueGet(uart4DataSizeHandle, &dataUartSize, portMAX_DELAY);
 		osMessageQueueGet(uart4DataSizeHandle, &dataUartSize, NULL, portMAX_DELAY);
 		if (dataUartSize > 4) {
 			if (dataUartBuffer[0] == 0x40 && checkLedCRC(dataUartBuffer, dataUartSize) ) {
 
 				switch (dataUartBuffer[2]){
 				case 1:
-//					lightEffect = rty; // отладка
 					if(noUsbConnect) lightEffect = 9;
 					if(doorMotorState) lightEffect = 5;
 					if(alarm) lightEffect = 8;
@@ -1464,51 +1467,33 @@ void StartModbusMaster(void *argument)
 //	osSemaphoreRelease(ModbusH2.ModBusSphrHandle);
   /* Infinite loop */
 	for (;;) {
-//		osSemaphoreAcquire(ModbusH2.ModBusSphrHandle, 300);
-//		ulTaskNotifyTake(pdTRUE, portMAX_DELAY); // block until query finishes
 			ModbusQuery(&ModbusH2, robot2[0]);
 			ulTaskNotifyTake(pdTRUE, portMAX_DELAY); // block until query finishes
-		osDelay(30);
-//			osSemaphoreRelease(ModbusH2.ModBusSphrHandle);
-
-
-//	osSemaphoreAcquire(ModbusH2.ModBusSphrHandle, 300);
+			osDelay(30);
 
 			ModbusQuery(&ModbusH2, robot2[1]);
 			ulTaskNotifyTake(pdTRUE, portMAX_DELAY); // block until query finishes
-//			osSemaphoreRelease(ModbusH2.ModBusSphrHandle);
 			osDelay(30);
 
-//		if (osSemaphoreAcquire(ModbusH2.ModBusSphrHandle, 300) == pdTRUE) {
 
 			ModbusQuery(&ModbusH2, gateIN[0]);
 			ulTaskNotifyTake(pdTRUE, portMAX_DELAY); // block until query finishes
-//		osDelay(delay);
 			osDelay(30);
-//			osSemaphoreRelease(ModbusH2.ModBusSphrHandle);
-//		}
 
-//		if (osSemaphoreAcquire(ModbusH2.ModBusSphrHandle, 300) == pdTRUE) {
 			ModbusQuery(&ModbusH2, gateIN[1]);
 			ulTaskNotifyTake(pdTRUE, portMAX_DELAY); // block until query finishes
 			osDelay(30);
-//			osSemaphoreRelease(ModbusH2.ModBusSphrHandle);
-//		}
-/*
-//		if (osSemaphoreAcquire(ModbusH2.ModBusSphrHandle, 300) == pdTRUE) {
+
+
 			ModbusQuery(&ModbusH2, gateOUT[0]);
 			ulTaskNotifyTake(pdTRUE, portMAX_DELAY); // block until query finishes
 			osDelay(30);
-//			osSemaphoreRelease(ModbusH2.ModBusSphrHandle);
-//		}
 
-//		if (osSemaphoreAcquire(ModbusH2.ModBusSphrHandle, 300) == pdTRUE) {
 			ModbusQuery(&ModbusH2, gateOUT[1]);
 			ulTaskNotifyTake(pdTRUE, portMAX_DELAY); // block until query finishes
-//			osSemaphoreRelease(ModbusH2.ModBusSphrHandle);
-//		}
 			osDelay(30);
-*/
+
+
 #ifdef REMOTE
 			ModbusQuery(&ModbusH2, remote[0]);
 			ulTaskNotifyTake(pdTRUE, portMAX_DELAY); // block until query finishes
