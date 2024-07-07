@@ -16,7 +16,7 @@
 #include "usbd_cdc_if.h"
 uint8_t usbRxBuffer[MAX_USB_BUFF_SIZE], usbTxBuffer[MAX_USB_BUFF_SIZE]; //Буферы данных USB
 uint16_t usbHoldingRegister[16]; //Массив Регистров хранения (HoldingRegister)
-uint8_t usbDiscreteRegister[9]; //Массив дискретных регистров
+uint8_t usbDiscreteRegister[10]; //Массив дискретных регистров
 uint16_t usbRxBufferSize;	//Размер принятых данных
 
 uint16_t modbusSlaveCRC;

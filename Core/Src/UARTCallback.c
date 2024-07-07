@@ -11,8 +11,9 @@
 #include "main.h"
 #include "Modbus.h"
 extern UART_HandleTypeDef huart4;
+extern osMessageQueueId_t uart4DataSizeHandle;
 extern uint8_t dataUartBuffer[];
-extern uint16_t  dataUartSize;
+//extern uint16_t  dataUartSize;
 /**
  * @brief
  * This is the callback for HAL interrupts of UART TX used by Modbus library.
@@ -134,13 +135,11 @@ void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
 	    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
 	      if(huart == &huart4)
 	        {
-	          dataUartSize = Size;
-//	      	  HAL_UART_AbortReceive(&huart4);
-	//        HAL_UART_Transmit_IT(&huart4, dataUartBuffer, Size);
+	    	  osMessageQueuePut(uart4DataSizeHandle, &Size, NULL, 0U);
+//	          dataUartSize = Size;
 	          HAL_UARTEx_ReceiveToIdle_IT(&huart4, dataUartBuffer, 5);
 	        }
 		/* Modbus RTU RX callback BEGIN */
-//	    HAL_GPIO_TogglePin(LED1_GPIO_Port, LED1_Pin);
 	    int i;
 	    for (i = 0; i < numberHandlers; i++ )
 	    {

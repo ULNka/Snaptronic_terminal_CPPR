@@ -45,11 +45,12 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define REMOTE 1
+//#define REMOTE 1
 #define MASTER_KEY 6393037			//Код мастер ключа
 #define FIRST_KEY 6393038			//Код первого ключа
 #define D0        D0_Pin
 #define D1        D1_Pin
+
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -141,6 +142,11 @@ const osThreadAttr_t ModbusMaster_attributes = {
   .stack_size = 1024 * 4,
   .priority = (osPriority_t) osPriorityLow,
 };
+/* Definitions for uart4DataSize */
+osMessageQueueId_t uart4DataSizeHandle;
+const osMessageQueueAttr_t uart4DataSize_attributes = {
+  .name = "uart4DataSize"
+};
 /* Definitions for usbLedTimer */
 osTimerId_t usbLedTimerHandle;
 const osTimerAttr_t usbLedTimer_attributes = {
@@ -152,14 +158,18 @@ const osSemaphoreAttr_t usbSem_attributes = {
   .name = "usbSem"
 };
 /* USER CODE BEGIN PV */
-uint8_t lightEffect=1;		//0-нет связи, 1-свободно, 2-занято, 3-техобслуживание, 4-заезд авто, 5-открывание дверки, 6-двкерка открыта
-uint8_t brightness = 205, doorMotorState = 0, alarm = 0, noUsbConnect = 0, rty;
-uint8_t dataUartBuffer[8];
+/* 0-нет связи, 1-свободно, 2-занято, 3-техобслуживание, 4-заезд авто,
+5-открывание дверки, 6-двкерка открыта, 7-Ошибка, 8-Тревога, 9-Нет связи с ПО
+*/
+uint8_t lightEffect=1;
+const uint8_t brightness = 205; //Яркость подсветки 0-255 (меньше 80 выглядит плохо)
+uint8_t doorMotorState = 0, alarm = 0, noUsbConnect = 0; // Доп статусы для подсветки, приоритетные
+uint8_t dataUartBuffer[8]; //Буфер для данных от модуля подсветки
 uint16_t dataUartSize;
 volatile uint8_t adcDataIsReady=0;
 volatile uint8_t wig_flag_inrt = 1;
 uint16_t adc[2];
-uint16_t ain1, ain2;
+uint16_t ain1, ain2, ainMax;
 float temper, hum; 					//Переменные влажности и температуры встроенного датчика
 char bufTemp[4];
 uint8_t bufHum[4];
@@ -201,7 +211,6 @@ int16_t map(int16_t input, int16_t inMin, int16_t inMax, int16_t outMin,
 	return result;
 }
 
-
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -235,6 +244,8 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
 void vApplicationStackOverflowHook( TaskHandle_t xTask, char *pcTaskName ){
 	printf("we have a problem...");
 }
+
+
 
 /* USER CODE END 0 */
 
@@ -279,7 +290,10 @@ struct dataMain settings;
   MX_IWDG_Init();
   /* USER CODE BEGIN 2 */
 //  HAL_GPIO_WritePin(WP_GPIO_Port, WP_Pin, 1);
+
   ledInit();
+  LCD_Init();
+  LCD_SendString("   AquaRobot ");
   HAL_ADCEx_Calibration_Start(&hadc1);
   HAL_ADC_Start_DMA(&hadc1, (uint32_t*)&adc, 2); // стартуем АЦП
   /* пока что так, затем реализовать чтение настроек из EEPROM */
@@ -341,6 +355,10 @@ struct dataMain settings;
   /* start timers, add new ones, ... */
     robotProcessingInit();
   /* USER CODE END RTOS_TIMERS */
+
+  /* Create the queue(s) */
+  /* creation of uart4DataSize */
+  uart4DataSizeHandle = osMessageQueueNew (4, sizeof(uint16_t), &uart4DataSize_attributes);
 
   /* USER CODE BEGIN RTOS_QUEUES */
   /* add queues, ... */
@@ -966,10 +984,10 @@ void StartSysUtil(void *argument)
   /* USER CODE BEGIN StartSysUtil */
   /* Infinite loop */
   for(;;)
-  {	HAL_GPIO_TogglePin(PWRLED_GPIO_Port, PWRLED_Pin);
+  {
+	HAL_GPIO_TogglePin(PWRLED_GPIO_Port, PWRLED_Pin);
 	HAL_IWDG_Refresh(&hiwdg);
 
-//	printf("Hello from SWO 2");
 osDelay(800);
   }
   /* USER CODE END StartSysUtil */
@@ -994,27 +1012,13 @@ void StartIOUtil(void *argument)
 			HAL_ADC_Stop_DMA(&hadc1); // это необязательно
 			ain1 = adc[0];
 			ain2 = adc[1];
-//			snprintf(trans_str, 63, "ADC %d %d\n", (uint16_t) adc[0], (uint16_t) adc[1]);
-//			HAL_UART_Transmit(&huart1, (uint8_t*) trans_str, strlen(trans_str),	1000);
 			adc[0] = 0;
 			adc[1] = 0;
 			HAL_ADC_Start_DMA(&hadc1, (uint32_t*) &adc, 2);
 		}
-//		if (getCarIsideStatus()) {
-//			HAL_GPIO_WritePin(LED1_GPIO_Port, LED1_Pin, !isReady);
-//		} else {
-//			HAL_GPIO_WritePin(LED1_GPIO_Port, LED1_Pin, 1);
-//		};
-//		if (getPhotoInSensor()) {
-//			HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, 0);
-//		} else {
-//			HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, 1);
-//		};
-//		if (getPhotoOutSensor()) {
-//			HAL_GPIO_WritePin(LED3_GPIO_Port, LED3_Pin, 0);
-//		} else {
+
 			HAL_GPIO_WritePin(LED5_GPIO_Port, LED5_Pin, !controllerError);
-//		};
+
 
     osDelay(100); // Поменять на 10
   }
@@ -1035,9 +1039,9 @@ void StartUsbSlave(void *argument)
   for(;;)
   {
 	osSemaphoreAcquire(usbSemHandle, portMAX_DELAY);
-	HAL_GPIO_WritePin(LED4_GPIO_Port, LED4_Pin, 0);
-	osTimerStart(usbLedTimerHandle, 80);
-	usbModbusProcessing();
+	HAL_GPIO_WritePin(LED4_GPIO_Port, LED4_Pin, 0); //Зажигаем синий диод при поступлении даннх
+	osTimerStart(usbLedTimerHandle, 80); //Гасим диод через 80мс
+	usbModbusProcessing(); //Обработчик данных с VCOM (USB COM Port)
     osDelay(1);
   }
   /* USER CODE END StartUsbSlave */
@@ -1095,13 +1099,11 @@ void StartClimatControl(void *argument)
 	uint16_t varHum = 0;
 	uint8_t data[3];
 //	uint16_t tempVarArr[2];
-	I2C_send(0b00110000, 0);   // 8ми битный интерфейс
-	I2C_send(0b00000010, 0);   // установка курсора в начале строки
-	I2C_send(0b00001100, 0);   // нормальный режим работы, выкл курсор
-	I2C_send(0b00000001, 0);   // очистка дисплея
 	/* Infinite loop */
 	for (;;) {
-		HAL_I2C_Master_Transmit(&hi2c1, sens_addr, (uint8_t[]){reqTemp}, 1, 200); //Запрос температуры
+		HAL_I2C_Master_Transmit(&hi2c1, sens_addr, &reqTemp, 1, 200); //Запрос температуры
+
+//		HAL_I2C_Master_Transmit(&hi2c1, sens_addr, (uint8_t[]){reqTemp}, 1, 200); //Запрос температуры
 		HAL_I2C_Master_Receive(&hi2c1, sens_addr, data, 3, 200);
 
 		data[1] &= 0xFC;  //Зануляем последние два бита
@@ -1208,7 +1210,7 @@ void StartSecurityTask(void *argument)
 		  switchRTig = 0;
 	  }
 	  /*------------*/
-	if (wig_available() ) {
+	if (wig_available() || usbDiscreteRegister[9]) {
 		wig_flag_inrt = 0;
 		uint32_t wcode = getCode();
 
@@ -1221,7 +1223,8 @@ void StartSecurityTask(void *argument)
 		HAL_UART_Transmit(&huart4, (uint8_t*) str, strlen(str), 1000);*/
 		/*----КОНЕЦ БЛОКА ОТЛАДК�?----*/
 
-		if (wcode == MASTER_KEY || wcode == FIRST_KEY) {
+		if (wcode == MASTER_KEY || wcode == FIRST_KEY || usbDiscreteRegister[9]) {
+			usbDiscreteRegister[9] = 0;
 			//Подадим предупреждающий сигнал
 			if(status == STOP){
 			HAL_GPIO_WritePin(BUZZER_GPIO_Port, BUZZER_Pin, 1);
@@ -1325,9 +1328,11 @@ void StartSecurityTask(void *argument)
 			zeroCurrent = 0;
 			overCurrent = 0;
 		}
+		if(ain1>ainMax) ainMax = ain1;
 
-		snprintf(trans_str, 13, "ADC %d   ", (uint16_t) ain1);
-		I2C_send(0b10000000, 0);   // переход на 1 строку
+		snprintf(trans_str, 13, "ADC %d   ", (uint16_t) ainMax);
+//		I2C_send(0b10000000, 0);   // переход на 1 строку
+		I2C_send(0b11000000, 0);   // переход на 2 строку
 		LCD_SendString((char*)trans_str);
 //-----------------------------------------//
 
@@ -1363,9 +1368,11 @@ void StartSecurityTask(void *argument)
 void StartLedStrip(void *argument)
 {
   /* USER CODE BEGIN StartLedStrip */
-
+uint16_t dataUartSize;
   /* Infinite loop */
 	for (;;) {
+//		osMessageQueueGet(uart4DataSizeHandle, &dataUartSize, portMAX_DELAY);
+		osMessageQueueGet(uart4DataSizeHandle, &dataUartSize, NULL, portMAX_DELAY);
 		if (dataUartSize > 4) {
 			if (dataUartBuffer[0] == 0x40 && checkLedCRC(dataUartBuffer, dataUartSize) ) {
 
@@ -1378,12 +1385,11 @@ void StartLedStrip(void *argument)
 					sendEffect(lightEffect);
 					break;
 				case 2:
-					if(alarm) brightness = 250;
-					sendBrightness(brightness);
+					if(alarm) sendBrightness(250);
+					else sendBrightness(brightness);
 				}
 			}
 			dataUartSize = 0;
-
 		}
 		osDelay(1);
   }

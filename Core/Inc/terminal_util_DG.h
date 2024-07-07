@@ -28,7 +28,7 @@ enum {
 	reset
 };
 extern uint16_t usbHoldingRegister[16];
-extern uint8_t usbDiscreteRegister[9];
+extern uint8_t usbDiscreteRegister[10];
 extern modbusHandler_t ModbusH2;
 extern modbus_t robot[2], gateIN[2], gateOUT[2], remote[2]; //Структуры для Modbus Master
 extern uint8_t lightEffect;
@@ -390,6 +390,7 @@ if(getGateInAutoMode() && getGateOutAutoMode()) gateMode = 1;
 else if(getGateInAutoMode() && !getGateOutAutoMode()) gateMode = 2;
 else if(!getGateInAutoMode() && getGateOutAutoMode()) gateMode = 3;
 else gateMode = 0;
+gateMode = 1;
 
 
 /* кнопка управления светофором ручной мойки */
