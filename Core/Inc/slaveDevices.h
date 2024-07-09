@@ -152,13 +152,13 @@ uint8_t getTrafficLightButton(){
 void setOutGreen(uint8_t val){
 	bitWrite(remoteOutputs[0], 0, val);
 }
-void setOutRed(uint8_t val){
+void setErrLamp(uint8_t val){
 	bitWrite(remoteOutputs[0], 1, val);
 }
 void setInGreen(uint8_t val){
 	bitWrite(remoteOutputs[0], 2, val);
 }
-void setInRed(uint8_t val){
+void setAlarmSound(uint8_t val){
 	bitWrite(remoteOutputs[0], 3, val);
 }
 void setRobotGreen(uint8_t val){

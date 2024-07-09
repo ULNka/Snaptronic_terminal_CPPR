@@ -1212,16 +1212,16 @@ void StartSecurityTask(void *argument)
 		STOP,
 		RUN
 	};
-	uint8_t keyIsValid = 0, status=0, direction=0, doorPosition=0, limitSwitch=0, switchRTig=0, switchFlag=0, zeroCurrent=0, overCurrent=0;
+	uint8_t keyIsValid = 0, status=0, direction=0, doorPosition=0, limitSwitch=0, switchRTig=0, switchFlag=0, zeroCurrent=0, overCurrent=0, overCurrentCnt=0;
 	uint16_t speed=0, lightPower=0;
 	HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_2); //Сервопривод
 	HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_4); //Подсветка
-	uint32_t timer=0, beepTimer=0;
+	uint32_t timer=0, beepTimer=0, alarmTimer=0;
 	if (!HAL_GPIO_ReadPin(IN1_GPIO_Port, IN1_Pin)) { //Чекаем концевик замка двЁрки
 		doorPosition = CLOSED;
 	} else doorPosition = UNKNOWN;
 //	char trans_str[13];
-	const uint16_t maxCurrent = 1500;
+	const uint16_t maxCurrent = 1600;
 	const uint16_t nullCurrent = 720;
 	const uint16_t maxSpeed = 500;
 	uint32_t wcode = 0;
@@ -1316,10 +1316,13 @@ void StartSecurityTask(void *argument)
 		}
 		else zeroCurrent = 0;
 
-		if(ain1>=maxCurrent) overCurrent = 1;
+		if(ain1>maxCurrent) {
+			overCurrent = 1;
+			overCurrentCnt++;
+		}
 		else overCurrent = 0;
 	}
-	if(status == RUN && overCurrent){
+	if(status == RUN && overCurrent && direction != INITIALIZATION && overCurrentCnt < 4){
 		status = STOP;
 		doorPosition=MIDDLE;
 		setSpeed(0);
@@ -1349,12 +1352,14 @@ void StartSecurityTask(void *argument)
 				osDelay(300);
 				smoothTick(0);
 				status = STOP;
+				overCurrentCnt = 0;
 				switchRTig = 0;
 				doorPosition = CLOSED;
 				if(limitSwitch) security = 1;
 			} else if (direction == OPENING && (!getState() || zeroCurrent)) {
 				status = STOP;
 				doorPosition = OPEN;
+				overCurrentCnt = 0;
 			} else if (direction == INITIALIZATION && (!getState() || zeroCurrent)) {
 				status = STOP;
 				doorPosition = OPEN;
@@ -1390,26 +1395,34 @@ void StartSecurityTask(void *argument)
 */
 		if (doorPosition == OPEN) {
 //			HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, 0); // отладка
-			HAL_GPIO_WritePin(OUT1_GPIO_Port, OUT1_Pin, 1); // реле подсветки
+//			HAL_GPIO_WritePin(OUT1_GPIO_Port, OUT1_Pin, 1); // реле подсветки
 			if (lightPower <= htim4.Init.Period) {
-				lightPower+=10;
+				lightPower+=5;
 			}
 
 		} else {
 //			HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, 1);
-			HAL_GPIO_WritePin(OUT1_GPIO_Port, OUT1_Pin, 0);
+//			HAL_GPIO_WritePin(OUT1_GPIO_Port, OUT1_Pin, 0);
 			if (lightPower > 0) {
-				lightPower-=10;
+				lightPower-=5;
 			}
 		}
 		TIM4->CCR4 = lightPower;
 
-		if(security && !limitSwitch) alarm = 1;
+		if(security && !limitSwitch) {
+			security = 0;
+			alarm = 1;
+			alarmTimer = HAL_GetTick();
+		}
+		if(alarm && (HAL_GetTick()-alarmTimer >= 60000)){
+			alarm = 0;
+			security = 0;
+		}
 /*
 	  if(doorPosition == CLOSED) HAL_GPIO_WritePin(LED3_GPIO_Port, LED3_Pin, 0);
 	  else HAL_GPIO_WritePin(LED3_GPIO_Port, LED3_Pin, 1);
 */
-					HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, !status);
+//		HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, !status);
 
     osDelay(10);
   }

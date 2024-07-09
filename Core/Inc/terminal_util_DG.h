@@ -259,6 +259,9 @@ void robotHandler(){
 //		lightEffect = 2;
 		if(!inProgress) setRedTrafficLight();
 	}
+	if(techBreack || controllerError){
+		setErrLamp(1);
+	} else setErrLamp(0);
 
 	/* END OF CODE Генератор статуса "Готов" */
 
@@ -325,6 +328,7 @@ setInGreen(!getClosedInSw());
 setOutGreen(!getClosedOutSw());
 
 	/* Установка/снятие паузы */
+/*
 if(!pauseFalg && getPauseButton()){
 	pauseFalg = 1;
 	pause = !pause;
@@ -332,6 +336,8 @@ if(!pauseFalg && getPauseButton()){
 if(pauseFalg && !getPauseButton()){
 	pauseFalg = 0;
 }
+*/
+pause = getPauseButton();
 
 	/* Кнопка сброса ошибки и режима перерыва */
 if (!resetFalg && getResetButton()){
@@ -386,12 +392,14 @@ if(gateOutButtonCloseFlag && !getExitCloseButton()){
 	setGateOutClosed(0);
 }
 /* Переключатель режима ворот */
+#ifdef REMOTE
 if(getGateInAutoMode() && getGateOutAutoMode()) gateMode = 1;
 else if(getGateInAutoMode() && !getGateOutAutoMode()) gateMode = 2;
 else if(!getGateInAutoMode() && getGateOutAutoMode()) gateMode = 3;
 else gateMode = 0;
+#else
 gateMode = 1;
-
+#endif
 
 /* кнопка управления светофором ручной мойки */
 	if (!handBoxButtonFlag && getTrafficLightButton()) {
