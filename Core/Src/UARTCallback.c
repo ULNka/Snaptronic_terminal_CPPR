@@ -60,40 +60,40 @@ void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart)
  * Modbus functionality.
  * @ingroup UartHandle UART HAL handler
  */
-//void HAL_UART_RxCpltCallback(UART_HandleTypeDef *UartHandle)
-//{
-//	BaseType_t xHigherPriorityTaskWoken = pdFALSE;
-//
-//	/* Modbus RTU RX callback BEGIN */
-//    int i;
-//    for (i = 0; i < numberHandlers; i++ )
-//    {
-//    	if (mHandlers[i]->port == UartHandle  )
-//    	{
-//
-//    		if(mHandlers[i]->xTypeHW == USART_HW)
-//    		{
-//    			RingAdd(&mHandlers[i]->xBufferRX, mHandlers[i]->dataRX);
-//    			HAL_UART_Receive_IT(mHandlers[i]->port, &mHandlers[i]->dataRX, 1);
-//    			xTimerResetFromISR(mHandlers[i]->xTimerT35, &xHigherPriorityTaskWoken);
-//    		}
-//    		break;
-//    	}
-//    }
-//    portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
-//
-//	/* Modbus RTU RX callback END */
-//
-//	/*
-//	 * Here you should implement the callback code for other UARTs not used by Modbus
-//	 *
-//	 *
-//	 * */
-//
-//
-//
-//
-//}
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *UartHandle)
+{
+	BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+
+	/* Modbus RTU RX callback BEGIN */
+    int i;
+    for (i = 0; i < numberHandlers; i++ )
+    {
+    	if (mHandlers[i]->port == UartHandle  )
+    	{
+
+    		if(mHandlers[i]->xTypeHW == USART_HW)
+    		{
+    			RingAdd(&mHandlers[i]->xBufferRX, mHandlers[i]->dataRX);
+    			HAL_UART_Receive_IT(mHandlers[i]->port, &mHandlers[i]->dataRX, 1);
+    			xTimerResetFromISR(mHandlers[i]->xTimerT35, &xHigherPriorityTaskWoken);
+    		}
+    		break;
+    	}
+    }
+    portYIELD_FROM_ISR( xHigherPriorityTaskWoken );
+
+	/* Modbus RTU RX callback END */
+
+	/*
+	 * Here you should implement the callback code for other UARTs not used by Modbus
+	 *
+	 *
+	 * */
+
+
+
+
+}
 
 
 #if  ENABLE_USART_DMA ==  1

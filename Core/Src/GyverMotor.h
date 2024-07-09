@@ -226,7 +226,7 @@ typedef enum GM_workMode {
 	void openDoor(uint16_t slowTime, uint32_t startTime, uint16_t speed) {
 
 		setMotorDirection(NORMAL);
-		if (HAL_GetTick() - startTime >= 15000) {
+		if (HAL_GetTick() - startTime >= 12000) {
 			_speed = 80;
 			smoothTick(0);
 //			_state=0;
@@ -242,7 +242,7 @@ typedef enum GM_workMode {
 	void closeDoor(uint16_t slowTime, uint32_t startTime, uint16_t speed) {
 
 		setMotorDirection(REVERSE);
-		if (HAL_GetTick() - startTime >= 15000) {
+		if (HAL_GetTick() - startTime >= 12000) {
 			_speed = 50;
 			smoothTick(0);
 //			_state=0;
@@ -268,9 +268,10 @@ typedef enum GM_workMode {
 		if(HAL_GetTick()-startTime>=2000){
 			_speed = 50;
 			smoothTick(0);
-		} else
+		} else{
 			_speed = 50;
 			smoothTick(250);
+		}
 	}
 	//Comment
 

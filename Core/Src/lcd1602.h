@@ -16,6 +16,8 @@
 
 extern I2C_HandleTypeDef hi2c1;
 
+void I2C_send(uint8_t data, uint8_t flags);
+
 void LCD_Init(){
 	I2C_send(0b00110000, 0);   // 8ми битный интерфейс
 	I2C_send(0b00000010, 0);   // установка курсора в начале строки

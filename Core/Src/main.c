@@ -26,7 +26,7 @@
 /* USER CODE BEGIN Includes */
 #include "stdio.h"
 #include "init.h"
-#include "lcd1602.h"
+//#include "lcd1602.h"
 #include "usb_modbus.h"
 #include "slaveDevices.h"
 #include "Modbus.h"
@@ -47,7 +47,6 @@
 /* USER CODE BEGIN PD */
 #define REMOTE
 #define MASTER_KEY 6393037			//Код мастер ключа
-#define FIRST_KEY 6393038			//Код первого ключа
 #define D0        D0_Pin
 #define D1        D1_Pin
 
@@ -152,6 +151,11 @@ osTimerId_t usbLedTimerHandle;
 const osTimerAttr_t usbLedTimer_attributes = {
   .name = "usbLedTimer"
 };
+/* Definitions for noConnectTimer */
+osTimerId_t noConnectTimerHandle;
+const osTimerAttr_t noConnectTimer_attributes = {
+  .name = "noConnectTimer"
+};
 /* Definitions for usbSem */
 osSemaphoreId_t usbSemHandle;
 const osSemaphoreAttr_t usbSem_attributes = {
@@ -165,19 +169,20 @@ uint8_t lightEffect=1;
 const uint8_t brightness = 205; //Яркость подсветки 0-255 (меньше 80 выглядит плохо)
 uint8_t doorMotorState = 0, alarm = 0, noUsbConnect = 0; // Доп статусы для подсветки, приоритетные
 uint8_t dataUartBuffer[8]; //Буфер для данных от модуля подсветки
+uint8_t security = 0;
 uint16_t dataUartSize;
+uint32_t connectTimer = 0;
 volatile uint8_t adcDataIsReady=0;
 volatile uint8_t wig_flag_inrt = 1;
 uint16_t adc[2];
 uint16_t ain1, ain2, ainMax;
-float temper, hum; 					//Переменные влажности и температуры встроенного датчика
-char bufTemp[4];
+float temper=24.0f, hum=50.0f; 					//Переменные влажности и температуры встроенного датчика
+uint8_t bufTemp[4];
 uint8_t bufHum[4];
 modbusHandler_t ModbusH2;
 modbus_t robot2[6], gateIN[2], gateOUT[2], remote[2]; //Структуры для Modbus Master
 uint16_t ModbusDATA[128]; //Буфер даннх для Modbus Master
-//uint16_t robotInputs[1], gateINInputs[1], gateOUTInputs[1], remoteInputs[1], robotOutputs[1], gateINOutputs[1], gateOUTOutnputs[1], remoteOutputs[1];
-
+uint32_t keyStorage[5] = {MASTER_KEY, 11012445, 11064873, 0, 0}; // Буфер хранения ключей
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -202,6 +207,7 @@ void StartSecurityTask(void *argument);
 void StartLedStrip(void *argument);
 void StartModbusMaster(void *argument);
 void usbLedCallback(void *argument);
+void noConnectCallback(void *argument);
 
 /* USER CODE BEGIN PFP */
 int16_t map(int16_t input, int16_t inMin, int16_t inMax, int16_t outMin,
@@ -239,6 +245,7 @@ void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef* hadc)
     if(hadc->Instance == ADC1)
     {
     	adcDataIsReady = 1;
+//    	HAL_ADC_Stop_DMA(&hadc1);
     }
 }
 void vApplicationStackOverflowHook( TaskHandle_t xTask, char *pcTaskName ){
@@ -292,8 +299,9 @@ struct dataMain settings;
 //  HAL_GPIO_WritePin(WP_GPIO_Port, WP_Pin, 1);
 
   ledInit();
-  LCD_Init();
-  LCD_SendString("    AquaRobot ");
+//  LCD_Init();
+//  LCD_SendString("    AquaRobot ");
+
   HAL_ADCEx_Calibration_Start(&hadc1);
   HAL_ADC_Start_DMA(&hadc1, (uint32_t*)&adc, 2); // стартуем АЦП
   /* пока что так, затем реализовать чтение настроек из EEPROM */
@@ -351,9 +359,13 @@ struct dataMain settings;
   /* creation of usbLedTimer */
   usbLedTimerHandle = osTimerNew(usbLedCallback, osTimerOnce, NULL, &usbLedTimer_attributes);
 
+  /* creation of noConnectTimer */
+  noConnectTimerHandle = osTimerNew(noConnectCallback, osTimerPeriodic, NULL, &noConnectTimer_attributes);
+
   /* USER CODE BEGIN RTOS_TIMERS */
   /* start timers, add new ones, ... */
-    robotProcessingInit();
+  osTimerStart(noConnectTimerHandle, 10000);
+  robotProcessingInit();
   /* USER CODE END RTOS_TIMERS */
 
   /* Create the queue(s) */
@@ -1003,24 +1015,41 @@ osDelay(800);
 void StartIOUtil(void *argument)
 {
   /* USER CODE BEGIN StartIOUtil */
-
+uint8_t counter=0;
+uint16_t ain1r=0, ain1k=0;
+float k = 0.07;
+static float filVal = 0;
 	/* Infinite loop */
 	for (;;)
   {
 		if (adcDataIsReady) {
 			adcDataIsReady = 0;
-			HAL_ADC_Stop_DMA(&hadc1); // это необязательно
-			ain1 = adc[0];
+//			HAL_ADC_Stop_DMA(&hadc1); // это необязательно
+   		    ain1r += adc[0];
+			counter++;
+			if (counter == 5) {
+				ain1k = ain1r / 5;
+				ain1r=0;
+				counter = 0;
+			}
+
 			ain2 = adc[1];
 			adc[0] = 0;
 			adc[1] = 0;
 			HAL_ADC_Start_DMA(&hadc1, (uint32_t*) &adc, 2);
 		}
+//-c "$_TARGETNAME configure -rtos FreeRTOS"
+		if (abs(ain1k - filVal) > 20)
+			k = 0.3;
+		else
+			k = 0.03;
+		filVal += ((float) ain1k - filVal) * k;
+		ain1 = (uint16_t) filVal;
 
 			HAL_GPIO_WritePin(LED5_GPIO_Port, LED5_Pin, !controllerError);
 
 
-    osDelay(100); // Поменять на 10
+    osDelay(10); // Поменять на 10
   }
   /* USER CODE END StartIOUtil */
 }
@@ -1040,6 +1069,8 @@ void StartUsbSlave(void *argument)
   {
 	osSemaphoreAcquire(usbSemHandle, portMAX_DELAY);
 	HAL_GPIO_WritePin(LED4_GPIO_Port, LED4_Pin, 0); //Зажигаем синий диод при поступлении даннх
+	osTimerStart(noConnectTimerHandle, 10000);
+	noUsbConnect = 0; //Есть связь с ПО
 	osTimerStart(usbLedTimerHandle, 80); //Гасим диод через 80мс
 	usbModbusProcessing(); //Обработчик данных с VCOM (USB COM Port)
     osDelay(1);
@@ -1057,7 +1088,6 @@ void StartUsbSlave(void *argument)
 void StartRobotProcess(void *argument)
 {
   /* USER CODE BEGIN StartRobotProcess */
-
   /* Infinite loop */
   for(;;)
   {
@@ -1089,10 +1119,10 @@ void StartClimatControl(void *argument)
   /* USER CODE BEGIN StartClimatControl */
 	HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_3);
 	uint16_t power;
-	const uint8_t reqReset = 0xFE;				//Команда сброса
-	const uint8_t reqTemp = 0xE3;				//Команда запроса температуры
-	const uint8_t reqHum = 0xE5;				//Команда запроса влажности
-	const uint8_t sens_addr = (0x40 << 1);		//Адрес датчика
+	uint8_t reqReset = 0xFE;				//Команда сброса
+	uint8_t reqTemp = 0xE3;				//Команда запроса температуры
+	uint8_t reqHum = 0xE5;				//Команда запроса влажности
+	uint8_t sens_addr = (0x40 << 1);		//Адрес датчика
 	HAL_I2C_Master_Transmit(&hi2c1, sens_addr, &reqReset, 1, 200); // Сброс встроенного датчика
 	uint16_t varTemp = 0;
 	uint16_t varHum = 0;
@@ -1113,19 +1143,19 @@ void StartClimatControl(void *argument)
 		data[1] &= 0xFC; //Зануляем последние два бита
 		varHum = data[1] | (data[0] << 8);
 		hum = (((float) varHum / 65536) * 125.0) - 6.0; //Преобразуем в проценты по формуле из даташита
-				/*
-				 memcpy(tempVarArr, &temper, sizeof(temper)); //Разбиваем float32 на два uint16 и заносим во временный буфер
-				 usbHoldingRegister[10] = tempVarArr[1];
-				 usbHoldingRegister[11] = tempVarArr[0];
-				 int16_t rtu = (int16_t)hum;
-				 rtu *=10;
+/*
+	 	memcpy(tempVarArr, &temper, sizeof(temper)); //Разбиваем float32 на два uint16 и заносим во временный буфер
+	    usbHoldingRegister[10] = tempVarArr[1];
+	 	usbHoldingRegister[11] = tempVarArr[0];
+	 	int16_t rtu = (int16_t)hum;
+		rtu *=10;
 
-				 memcpy(tempVarArr, &rtu, sizeof(rtu)); //Разбиваем float32 на два uint16 и заносим во временный буфер
-				 usbHoldingRegister[12] = tempVarArr[1];
-				 usbHoldingRegister[13] = tempVarArr[0];*/
-
-				 sprintf((char*)bufTemp, "%.1f", temper); //Преобразуем float32 в строку(массив символов)
-				 sprintf((char*)bufHum, "%.1f", hum); //Преобразуем float32 в строку(массив символов)
+		memcpy(tempVarArr, &rtu, sizeof(rtu)); //Разбиваем float32 на два uint16 и заносим во временный буфер
+		usbHoldingRegister[12] = tempVarArr[1];
+		usbHoldingRegister[13] = tempVarArr[0];*/
+//
+//		sprintf((char*)bufTemp, "%.1f", temper); //Преобразуем float32 в строку(массив символов)
+//		sprintf((char*)bufHum, "%.1f", hum); //Преобразуем float32 в строку(массив символов)
 
 		if ((int16_t)temper <= heaterTemp) {
 			HAL_GPIO_WritePin(OUT6_GPIO_Port, OUT6_Pin, GPIO_PIN_SET);
@@ -1182,18 +1212,19 @@ void StartSecurityTask(void *argument)
 		STOP,
 		RUN
 	};
-	uint8_t status=0, direction, doorPosition, limitSwitch, switchRTig, switchFlag, zeroCurrent, overCurrent;
-	uint16_t speed, lightPower;
+	uint8_t keyIsValid = 0, status=0, direction=0, doorPosition=0, limitSwitch=0, switchRTig=0, switchFlag=0, zeroCurrent=0, overCurrent=0;
+	uint16_t speed=0, lightPower=0;
 	HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_2); //Сервопривод
 	HAL_TIM_PWM_Start(&htim4, TIM_CHANNEL_4); //Подсветка
-	uint32_t timer, beepTimer, lightTimer;
+	uint32_t timer=0, beepTimer=0;
 	if (!HAL_GPIO_ReadPin(IN1_GPIO_Port, IN1_Pin)) { //Чекаем концевик замка двЁрки
 		doorPosition = CLOSED;
 	} else doorPosition = UNKNOWN;
-	char trans_str[13];
-	const uint16_t maxCurrent = 680;
-	const uint16_t nullCurrent = 480;
+//	char trans_str[13];
+	const uint16_t maxCurrent = 1500;
+	const uint16_t nullCurrent = 720;
 	const uint16_t maxSpeed = 500;
+	uint32_t wcode = 0;
   /* Infinite loop */
   for(;;)
   {
@@ -1208,10 +1239,27 @@ void StartSecurityTask(void *argument)
 		  switchRTig = 0;
 	  }
 	  /*------------*/
-	if (wig_available() || usbDiscreteRegister[9]) {
-		wig_flag_inrt = 0;
-		uint32_t wcode = getCode();
-
+		if (wig_available()) {
+			wig_flag_inrt = 0;
+			wcode = getCode();
+			for (uint8_t i=0; i < 5; i++) {
+				if (wcode == keyStorage[i] && wcode !=0) {
+					keyIsValid = 1;
+					break;
+				}
+			}
+			wig_flag_inrt = 1;
+			wcode = 0;
+			if (!keyIsValid) {
+				// Сигнал неверного ключа
+				for (int8_t i = 0; i < 3; i++) {
+					HAL_GPIO_WritePin(BUZZER_GPIO_Port, BUZZER_Pin, 1);
+					osDelay(100);
+					HAL_GPIO_WritePin(BUZZER_GPIO_Port, BUZZER_Pin, 0);
+					osDelay(100);
+				}
+			}
+		}
 		/*----ОТЛАДКА----*/
 		/*int16_t wtype = getWiegandType();
 		wig_flag_inrt = 1;
@@ -1220,16 +1268,18 @@ void StartSecurityTask(void *argument)
 				wcode, wtype);
 		HAL_UART_Transmit(&huart4, (uint8_t*) str, strlen(str), 1000);*/
 		/*----КОНЕЦ БЛОКА ОТЛАДК�?----*/
-
-		if (wcode == MASTER_KEY || wcode == FIRST_KEY || usbDiscreteRegister[9]) {
-			usbDiscreteRegister[9] = 0;
-			//Подадим предупреждающий сигнал
-			if(status == STOP){
-			HAL_GPIO_WritePin(BUZZER_GPIO_Port, BUZZER_Pin, 1);
-			osDelay(1000);
-			HAL_GPIO_WritePin(BUZZER_GPIO_Port, BUZZER_Pin, 0);
-			osDelay(500);
-			}
+		if (keyIsValid || usbDiscreteRegister[9] ) {
+				if(security) security =0;
+				alarm = 0;
+				keyIsValid = 0;
+				usbDiscreteRegister[9] = 0;
+				//Подадим предупреждающий сигнал
+				if(status == STOP){
+				HAL_GPIO_WritePin(BUZZER_GPIO_Port, BUZZER_Pin, 1);
+				osDelay(1000);
+				HAL_GPIO_WritePin(BUZZER_GPIO_Port, BUZZER_Pin, 0);
+				osDelay(500);
+				}
 
 			timer = HAL_GetTick();
 			beepTimer = timer;
@@ -1256,20 +1306,14 @@ void StartSecurityTask(void *argument)
 				direction = INITIALIZATION;
 				status = RUN;
 			}
-		} else {
-			// Сигнал неверного ключа
-			for(int8_t i = 0; i<3; i++){
-				HAL_GPIO_WritePin(BUZZER_GPIO_Port, BUZZER_Pin, 1);
-				osDelay(100);
-				HAL_GPIO_WritePin(BUZZER_GPIO_Port, BUZZER_Pin, 0);
-				osDelay(100);
-			}
 		}
-	}
+
 	doorMotorState = status;
 //---------Контроль тока мотора-------------//
 	if(status == RUN && (HAL_GetTick()-timer >= 2000)){
-		if(ain1 < nullCurrent) zeroCurrent = 1;
+		if(ain1 < nullCurrent) {
+			zeroCurrent = 1;
+		}
 		else zeroCurrent = 0;
 
 		if(ain1>=maxCurrent) overCurrent = 1;
@@ -1297,7 +1341,7 @@ void StartSecurityTask(void *argument)
 				closeDoor(4000, timer, speed);
 				break;
 			case INITIALIZATION:
-				initDoorPosition(190, 10000, timer);
+				initDoorPosition(200, 10000, timer);
 				break;
 			}
 			if (direction == CLOSING && (!getState() || switchRTig || zeroCurrent)) {
@@ -1307,6 +1351,7 @@ void StartSecurityTask(void *argument)
 				status = STOP;
 				switchRTig = 0;
 				doorPosition = CLOSED;
+				if(limitSwitch) security = 1;
 			} else if (direction == OPENING && (!getState() || zeroCurrent)) {
 				status = STOP;
 				doorPosition = OPEN;
@@ -1326,27 +1371,32 @@ void StartSecurityTask(void *argument)
 			zeroCurrent = 0;
 			overCurrent = 0;
 		}
-		if(ain1>ainMax) ainMax = ain1;
+//		if(ain1>ainMax) ainMax = ain1;
+//
+//		snprintf(trans_str, 13, "ADC %d   ", (uint16_t) ain1);
+//		I2C_send(0b10000000, 0);   // переход на 1 строку
+//		LCD_SendString((char*)trans_str);
+//		snprintf(trans_str, 13, "ADC %d   ", (uint16_t) ainMax);
+//		I2C_send(0b11000000, 0);   // переход на 2 строку
+//		LCD_SendString((char*)trans_str);
 
-		snprintf(trans_str, 13, "ADC %d   ", (uint16_t) ainMax);
-		I2C_send(0b11000000, 0);   // переход на 2 строку
-		LCD_SendString((char*)trans_str);
 //-----------------------------------------//
 
 	  /*--------------*/
 	//Закрытие дверки кнопкой
-	  if(!HAL_GPIO_ReadPin(IN2_GPIO_Port, IN2_Pin) && doorPosition == OPEN){
-		// toClose = 1;
+/*	  if(!HAL_GPIO_ReadPin(IN2_GPIO_Port, IN2_Pin) && doorPosition == OPEN){
+
 	  }
+*/
 		if (doorPosition == OPEN) {
-			HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, 0); // отладка
+//			HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, 0); // отладка
 			HAL_GPIO_WritePin(OUT1_GPIO_Port, OUT1_Pin, 1); // реле подсветки
 			if (lightPower <= htim4.Init.Period) {
 				lightPower+=10;
 			}
 
 		} else {
-			HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, 1);
+//			HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, 1);
 			HAL_GPIO_WritePin(OUT1_GPIO_Port, OUT1_Pin, 0);
 			if (lightPower > 0) {
 				lightPower-=10;
@@ -1354,9 +1404,12 @@ void StartSecurityTask(void *argument)
 		}
 		TIM4->CCR4 = lightPower;
 
+		if(security && !limitSwitch) alarm = 1;
+/*
 	  if(doorPosition == CLOSED) HAL_GPIO_WritePin(LED3_GPIO_Port, LED3_Pin, 0);
 	  else HAL_GPIO_WritePin(LED3_GPIO_Port, LED3_Pin, 1);
-
+*/
+					HAL_GPIO_WritePin(LED2_GPIO_Port, LED2_Pin, !status);
 
     osDelay(10);
   }
@@ -1464,7 +1517,7 @@ void StartModbusMaster(void *argument)
 	remote[1].u16CoilsNo = 1;
 	remote[1].u16reg = remoteOutputs;
 	remote[1].u32CurrentTask = ModbusMasterHandle;
-//	osSemaphoreRelease(ModbusH2.ModBusSphrHandle);
+
   /* Infinite loop */
 	for (;;) {
 			ModbusQuery(&ModbusH2, robot2[0]);
@@ -1502,7 +1555,6 @@ void StartModbusMaster(void *argument)
 			ModbusQuery(&ModbusH2, remote[1]);
 			ulTaskNotifyTake(pdTRUE, portMAX_DELAY); // block until query finishes
 			osDelay(30);
-
 #endif
 	}
   /* USER CODE END StartModbusMaster */
@@ -1514,6 +1566,14 @@ void usbLedCallback(void *argument)
   /* USER CODE BEGIN usbLedCallback */
 	HAL_GPIO_WritePin(LED4_GPIO_Port, LED4_Pin, 1);
   /* USER CODE END usbLedCallback */
+}
+
+/* noConnectCallback function */
+void noConnectCallback(void *argument)
+{
+  /* USER CODE BEGIN noConnectCallback */
+noUsbConnect = 1;
+  /* USER CODE END noConnectCallback */
 }
 
 /**
