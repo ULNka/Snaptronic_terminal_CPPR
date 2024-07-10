@@ -38,7 +38,7 @@ uint8_t isReady = 1, readyFlag=1, inProgress, isFinish, pause, chasisDisabled, t
 uint8_t carInDGFalg, robotPhotoIsBlack=0;
 int8_t coolerTemp, heaterTemp;
 int16_t readyDelay;
-uint32_t carInTimer;
+uint32_t carInTimer, beepTimer;
 /* Definitions for impEntrTimer */
 osTimerId_t impEntrTimerHandle;
 const osTimerAttr_t impEntrTimer_attributes = {
@@ -259,12 +259,25 @@ void robotHandler(){
 //		lightEffect = 2;
 		if(!inProgress) setRedTrafficLight();
 	}
-	if(techBreack || controllerError){
+#ifdef REMOTE
+	if(controllerError){
+		static uint8_t a;
+		if(HAL_GetTick()-beepTimer >= 800){
+			beepTimer = HAL_GetTick();
+			a=!a;
+			setErrLamp(a);
+			setAlarmSound(a);
+		}
+	}else if(techBreack){
 		setErrLamp(1);
-	} else setErrLamp(0);
-
+		setAlarmSound(0);
+	} else {
+		setErrLamp(0);
+		setAlarmSound(0);
+	}
+#endif
 	/* END OF CODE Генератор статуса "Готов" */
-
+setRobotGatesIsOpen((getClosedInSw() || getClosedOutSw())); //Сигнал открытых ворот для вентиляции
 	/* Сетофор */
 //	if(controllerError || carInRobotBay) setRedTrafficLight();
 }
@@ -321,7 +334,7 @@ void gatePhotoHandler(){
 }
 
 void remoteHandler(){
-	static uint8_t pauseFalg, resetFalg, gateInButtonOpenFlag, gateInButtonCloseFlag, gateOutButtonOpenFlag, gateOutButtonCloseFlag, handBoxButtonFlag;
+	static uint8_t resetFalg, gateInButtonOpenFlag, gateInButtonCloseFlag, gateOutButtonOpenFlag, gateOutButtonCloseFlag, handBoxButtonFlag;
 	static uint32_t resetButtonTimer, handBoxTimer;
 	/* Индикаторы концевиков ворот */
 setInGreen(!getClosedInSw());
