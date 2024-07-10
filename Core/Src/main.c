@@ -1221,9 +1221,9 @@ void StartSecurityTask(void *argument)
 		doorPosition = CLOSED;
 	} else doorPosition = UNKNOWN;
 //	char trans_str[13];
-	const uint16_t maxCurrent = 1600;
-	const uint16_t nullCurrent = 720;
-	const uint16_t maxSpeed = 500;
+	 uint16_t maxCurrent = 1800;
+	 uint16_t nullCurrent = 720;
+	 uint16_t maxSpeed = 500;
 	uint32_t wcode = 0;
   /* Infinite loop */
   for(;;)
@@ -1284,6 +1284,7 @@ void StartSecurityTask(void *argument)
 			timer = HAL_GetTick();
 			beepTimer = timer;
 			speed = maxSpeed;
+			nullCurrent = ain1;
 			if(doorPosition != UNKNOWN){
 				if(getState() !=0) {
 					status = STOP;
@@ -1310,8 +1311,8 @@ void StartSecurityTask(void *argument)
 
 	doorMotorState = status;
 //---------Контроль тока мотора-------------//
-	if(status == RUN && (HAL_GetTick()-timer >= 2000)){
-		if(ain1 < nullCurrent) {
+	if(status == RUN && (HAL_GetTick()-timer >= 3000)){
+		if(ain1 < nullCurrent+50) {
 			zeroCurrent = 1;
 		}
 		else zeroCurrent = 0;
