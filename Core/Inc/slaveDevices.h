@@ -60,10 +60,10 @@ void setRobotGatesIsOpen(uint8_t val){
 uint8_t getPhotoInSensor(){
 	 return bitRead(gateINInputs[0], 0);
 }
-uint8_t getClosedInSw(){
+uint8_t getOpenInSw(){
 	 return bitRead(gateINInputs[0], 1);
 }
-uint8_t getOpenInSw(){
+uint8_t getClosedInSw(){
 	 return bitRead(gateINInputs[0], 2);
 }
 uint8_t getPhotoHandBox(){
@@ -105,10 +105,10 @@ uint8_t getPhotoOutSensor(){
 	 return bitRead(gateOUTInputs[0], 0);
 }
 uint8_t getClosedOutSw(){
-	 return bitRead(gateOUTInputs[0], 1);
+	 return bitRead(gateOUTInputs[0], 2);
 }
 uint8_t getOpenOutSw(){
-	 return bitRead(gateOUTInputs[0], 2);
+	 return bitRead(gateOUTInputs[0], 1);
 }
 void setGateOutOpen(uint8_t val){
 	bitWrite(gateOUTOutnputs[0], 0, val);

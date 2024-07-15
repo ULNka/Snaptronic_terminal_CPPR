@@ -26,7 +26,7 @@
 /* USER CODE BEGIN Includes */
 #include "stdio.h"
 #include "init.h"
-//#include "lcd1602.h"
+#include "lcd1602.h"
 #include "usb_modbus.h"
 #include "slaveDevices.h"
 #include "Modbus.h"
@@ -1015,29 +1015,31 @@ osDelay(800);
 void StartIOUtil(void *argument)
 {
   /* USER CODE BEGIN StartIOUtil */
-uint8_t counter=0;
-uint16_t ain1r=0, ain1k=0;
-float k = 0.07;
-static float filVal = 0;
+//uint8_t counter=0;
+//uint16_t ain1r=0, ain1k=0;
+//float k = 0.07;
+//static float filVal = 0;
 	/* Infinite loop */
 	for (;;)
   {
 		if (adcDataIsReady) {
 			adcDataIsReady = 0;
+			ain1 = adc[0];
 //			HAL_ADC_Stop_DMA(&hadc1); // это необязательно
-   		    ain1r += adc[0];
-			counter++;
-			if (counter == 5) {
-				ain1k = ain1r / 5;
-				ain1r=0;
-				counter = 0;
-			}
+//   		    ain1r += adc[0];
+//			counter++;
+//			if (counter == 5) {
+//				ain1 = ain1r / 5;
+//				ain1r=0;
+//				counter = 0;
+//			}
 
 			ain2 = adc[1];
 			adc[0] = 0;
 			adc[1] = 0;
 			HAL_ADC_Start_DMA(&hadc1, (uint32_t*) &adc, 2);
 		}
+		/*
 //-c "$_TARGETNAME configure -rtos FreeRTOS"
 		if (abs(ain1k - filVal) > 20)
 			k = 0.3;
@@ -1045,6 +1047,7 @@ static float filVal = 0;
 			k = 0.03;
 		filVal += ((float) ain1k - filVal) * k;
 		ain1 = (uint16_t) filVal;
+		*/
 
 			HAL_GPIO_WritePin(LED5_GPIO_Port, LED5_Pin, !controllerError);
 
@@ -1220,11 +1223,12 @@ void StartSecurityTask(void *argument)
 	if (!HAL_GPIO_ReadPin(IN1_GPIO_Port, IN1_Pin)) { //Чекаем концевик замка двЁрки
 		doorPosition = CLOSED;
 	} else doorPosition = UNKNOWN;
-//	char trans_str[13];
-	 uint16_t maxCurrent = 1800;
-	 uint16_t nullCurrent = 720;
-	 uint16_t maxSpeed = 500;
+	char trans_str[13];
+	uint16_t maxCurrent = 2500;
+	uint16_t nullCurrent = 720;
+	uint16_t maxSpeed = 500;
 	uint32_t wcode = 0;
+	uint8_t isMasterKey = 0;
   /* Infinite loop */
   for(;;)
   {
@@ -1242,9 +1246,11 @@ void StartSecurityTask(void *argument)
 		if (wig_available()) {
 			wig_flag_inrt = 0;
 			wcode = getCode();
+			isMasterKey = 0;
 			for (uint8_t i=0; i < 5; i++) {
 				if (wcode == keyStorage[i] && wcode !=0) {
 					keyIsValid = 1;
+					if(i==0) isMasterKey = 1;
 					break;
 				}
 			}
@@ -1317,7 +1323,7 @@ void StartSecurityTask(void *argument)
 		}
 		else zeroCurrent = 0;
 
-		if(ain1>maxCurrent) {
+		if(ain1>maxCurrent && !isMasterKey) {
 			overCurrent = 1;
 			overCurrentCnt++;
 		}
@@ -1377,14 +1383,14 @@ void StartSecurityTask(void *argument)
 			zeroCurrent = 0;
 			overCurrent = 0;
 		}
-//		if(ain1>ainMax) ainMax = ain1;
-//
-//		snprintf(trans_str, 13, "ADC %d   ", (uint16_t) ain1);
-//		I2C_send(0b10000000, 0);   // переход на 1 строку
-//		LCD_SendString((char*)trans_str);
-//		snprintf(trans_str, 13, "ADC %d   ", (uint16_t) ainMax);
-//		I2C_send(0b11000000, 0);   // переход на 2 строку
-//		LCD_SendString((char*)trans_str);
+		if(ain1>ainMax) ainMax = ain1;
+
+		snprintf(trans_str, 13, "ADC %d   ", (uint16_t) ain1);
+		I2C_send(0b10000000, 0);   // переход на 1 строку
+		LCD_SendString((char*)trans_str);
+		snprintf(trans_str, 13, "ADC %d   ", (uint16_t) ainMax);
+		I2C_send(0b11000000, 0);   // переход на 2 строку
+		LCD_SendString((char*)trans_str);
 
 //-----------------------------------------//
 
@@ -1419,6 +1425,9 @@ void StartSecurityTask(void *argument)
 			alarm = 0;
 			security = 0;
 		}
+
+		HAL_GPIO_WritePin(OUT1_GPIO_Port, OUT1_Pin, alarm); // Реле сирены
+
 /*
 	  if(doorPosition == CLOSED) HAL_GPIO_WritePin(LED3_GPIO_Port, LED3_Pin, 0);
 	  else HAL_GPIO_WritePin(LED3_GPIO_Port, LED3_Pin, 1);
@@ -1532,43 +1541,44 @@ void StartModbusMaster(void *argument)
 	remote[1].u16reg = remoteOutputs;
 	remote[1].u32CurrentTask = ModbusMasterHandle;
 
+	const uint32_t delay = 5;
+
   /* Infinite loop */
 	for (;;) {
 			ModbusQuery(&ModbusH2, robot2[0]);
 			ulTaskNotifyTake(pdTRUE, portMAX_DELAY); // block until query finishes
-			osDelay(30);
+			osDelay(delay);
+
 
 			ModbusQuery(&ModbusH2, robot2[1]);
 			ulTaskNotifyTake(pdTRUE, portMAX_DELAY); // block until query finishes
-			osDelay(30);
-
+			osDelay(delay);
 
 			ModbusQuery(&ModbusH2, gateIN[0]);
 			ulTaskNotifyTake(pdTRUE, portMAX_DELAY); // block until query finishes
-			osDelay(30);
+			osDelay(delay);
 
 			ModbusQuery(&ModbusH2, gateIN[1]);
 			ulTaskNotifyTake(pdTRUE, portMAX_DELAY); // block until query finishes
-			osDelay(30);
-
+			osDelay(delay);
 
 			ModbusQuery(&ModbusH2, gateOUT[0]);
 			ulTaskNotifyTake(pdTRUE, portMAX_DELAY); // block until query finishes
-			osDelay(30);
+			osDelay(delay);
 
 			ModbusQuery(&ModbusH2, gateOUT[1]);
 			ulTaskNotifyTake(pdTRUE, portMAX_DELAY); // block until query finishes
-			osDelay(30);
+			osDelay(delay);
 
 
 #ifdef REMOTE
 			ModbusQuery(&ModbusH2, remote[0]);
 			ulTaskNotifyTake(pdTRUE, portMAX_DELAY); // block until query finishes
-			osDelay(30);
+			osDelay(delay);
 
 			ModbusQuery(&ModbusH2, remote[1]);
 			ulTaskNotifyTake(pdTRUE, portMAX_DELAY); // block until query finishes
-			osDelay(30);
+			osDelay(delay);
 #endif
 	}
   /* USER CODE END StartModbusMaster */

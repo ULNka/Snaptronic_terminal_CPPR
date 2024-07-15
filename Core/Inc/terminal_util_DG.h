@@ -337,8 +337,8 @@ void remoteHandler(){
 	static uint8_t resetFalg, gateInButtonOpenFlag, gateInButtonCloseFlag, gateOutButtonOpenFlag, gateOutButtonCloseFlag, handBoxButtonFlag;
 	static uint32_t resetButtonTimer, handBoxTimer;
 	/* Индикаторы концевиков ворот */
-setInGreen(!getClosedInSw());
-setOutGreen(!getClosedOutSw());
+setInGreen(getClosedInSw());
+setOutGreen(getClosedOutSw());
 
 	/* Установка/снятие паузы */
 /*
@@ -423,19 +423,27 @@ gateMode = 1;
 	if (handBoxButtonFlag && getTrafficLightButton() && (HAL_GetTick() - handBoxTimer >= 3000)) {
 		handBoxButtonFlag = 1;
 		setHandBoxRemote(1);
-		setHandRed(0);
-		setHandGreen(0);
+		setGateInHandGreen(0);
+		setGateInHandRed(0);
+//		setHandRed(0);
+//		setHandGreen(0);
 	}
 
 	if (handBoxButtonFlag && !getTrafficLightButton() && (HAL_GetTick() - handBoxTimer < 3000)) {
 		handBoxButtonFlag = 0;
 		if (getHandBoxGreen()) {
 			setHandBoxRemote(1);
-			setHandRed(1);
+			setGateInHandGreen(0);
+			setGateInHandRed(1);
 		} else {
 			setHandBoxRemote(0);
+			setGateInHandGreen(1);
 		}
 	}
+	if(handBoxButtonFlag && !getTrafficLightButton()) handBoxButtonFlag=0;
+
+	setHandGreen(getHandBoxGreen());
+	setHandRed(getHandBoxRed());
 }
 
 void controllerReset(){
