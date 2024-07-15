@@ -17,6 +17,7 @@
 extern I2C_HandleTypeDef hi2c1;
 
 void I2C_send(uint8_t data, uint8_t flags);
+void LCD_Init();
 
 void LCD_Init(){
 	I2C_send(0b00110000, 0);   // 8ми битный интерфейс
@@ -30,7 +31,7 @@ void I2C_send(uint8_t data, uint8_t flags) {
 	HAL_StatusTypeDef res;
 
 	for (;;) {                                               // бесконечный цикл
-		res = HAL_I2C_IsDeviceReady(&hi2c1, LCD_ADDR, 1, HAL_MAX_DELAY); // проверяем, готово ли устройство по адресу lcd_addr для связи
+		res = HAL_I2C_IsDeviceReady(&hi2c1, LCD_ADDR, 1, 500); // проверяем, готово ли устройство по адресу lcd_addr для связи
 		if (res == HAL_OK)
 			break;                  // если да, то выходим из бесконечного цикла
 	}

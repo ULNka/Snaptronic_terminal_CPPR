@@ -299,7 +299,7 @@ struct dataMain settings;
 //  HAL_GPIO_WritePin(WP_GPIO_Port, WP_Pin, 1);
 
   ledInit();
-//  LCD_Init();
+  LCD_Init();
 //  LCD_SendString("    AquaRobot ");
 
   HAL_ADCEx_Calibration_Start(&hadc1);
@@ -324,7 +324,7 @@ struct dataMain settings;
   ModbusH2.uModbusType = MB_MASTER;
   ModbusH2.port =  &huart3;
   ModbusH2.u8id = 0; // For master it must be 0
-  ModbusH2.u16timeOut = 200;
+  ModbusH2.u16timeOut = 100;
 //  ModbusH2.EN_Port = NULL;
   ModbusH2.EN_Port = RE2_GPIO_Port;
   ModbusH2.EN_Pin = RE2_Pin;
@@ -1224,7 +1224,7 @@ void StartSecurityTask(void *argument)
 		doorPosition = CLOSED;
 	} else doorPosition = UNKNOWN;
 	char trans_str[13];
-	uint16_t maxCurrent = 2500;
+	uint16_t maxCurrent = 2000;
 	uint16_t nullCurrent = 720;
 	uint16_t maxSpeed = 500;
 	uint32_t wcode = 0;
