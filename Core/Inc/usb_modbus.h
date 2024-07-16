@@ -10,7 +10,7 @@
 
 #define OWEN_OFFSET 512
 #define USB_ID 0x1F
-#define MAX_USB_BUFF_SIZE 32
+#define MAX_USB_BUFF_SIZE 64
 
 //#include "modbus_util.h"
 #include "usbd_cdc_if.h"

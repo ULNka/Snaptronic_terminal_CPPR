@@ -1071,11 +1071,11 @@ void StartUsbSlave(void *argument)
   for(;;)
   {
 	osSemaphoreAcquire(usbSemHandle, portMAX_DELAY);
+	usbModbusProcessing(); //Обработчик данных с VCOM (USB COM Port)
 	HAL_GPIO_WritePin(LED4_GPIO_Port, LED4_Pin, 0); //Зажигаем синий диод при поступлении даннх
 	osTimerStart(noConnectTimerHandle, 10000);
 	noUsbConnect = 0; //Есть связь с ПО
 	osTimerStart(usbLedTimerHandle, 80); //Гасим диод через 80мс
-	usbModbusProcessing(); //Обработчик данных с VCOM (USB COM Port)
     osDelay(1);
   }
   /* USER CODE END StartUsbSlave */
