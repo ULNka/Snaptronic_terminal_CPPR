@@ -506,8 +506,7 @@ static uint8_t  USBD_CDC_Init(USBD_HandleTypeDef *pdev, uint8_t cfgidx)
   USBD_LL_OpenEP(pdev, CDC_CMD_EP, USBD_EP_TYPE_INTR, CDC_CMD_PACKET_SIZE);
   pdev->ep_in[CDC_CMD_EP & 0xFU].is_used = 1U;
 
-//  pdev->pClassData = USBD_malloc(sizeof(USBD_CDC_HandleTypeDef));
-  pdev->pClassData = (void *) USBD_malloc(sizeof (USBD_CDC_HandleTypeDef));
+  pdev->pClassData = USBD_malloc(sizeof(USBD_CDC_HandleTypeDef));
 
   if (pdev->pClassData == NULL)
   {

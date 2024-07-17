@@ -34,7 +34,7 @@
 /* USER CODE BEGIN PV */
 /* Private variables ---------------------------------------------------------*/
 extern osSemaphoreId_t usbSemHandle;
-extern uint8_t usbRxBuffer[32];
+extern uint8_t usbRxBuffer[64];
 extern uint16_t usbRxBufferSize;
 //extern void setUsbSem();
 /* USER CODE END PV */
@@ -183,6 +183,7 @@ static int8_t CDC_DeInit_FS(void)
 static int8_t CDC_Control_FS(uint8_t cmd, uint8_t* pbuf, uint16_t length)
 {
   /* USER CODE BEGIN 5 */
+	uint8_t tempbuf[7] = {0,0,0,0,0,0,0};
   switch(cmd)
   {
     case CDC_SEND_ENCAPSULATED_COMMAND:
@@ -223,10 +224,32 @@ static int8_t CDC_Control_FS(uint8_t cmd, uint8_t* pbuf, uint16_t length)
   /* 6      | bDataBits  |   1   | Number Data bits (5, 6, 7, 8 or 16).          */
   /*******************************************************************************/
     case CDC_SET_LINE_CODING:
-
+    	tempbuf[0] = pbuf[0];
+    	tempbuf[1] = pbuf[1];
+    	tempbuf[2] = pbuf[2];
+    	tempbuf[3] = pbuf[3];
+    	tempbuf[4] = pbuf[4];
+    	tempbuf[5] = pbuf[5];
+    	tempbuf[6] = pbuf[6];
     break;
 
     case CDC_GET_LINE_CODING:
+      	pbuf[0] = tempbuf[0];
+      	pbuf[1] = tempbuf[1];
+      	pbuf[2] = tempbuf[2];
+      	pbuf[3] = tempbuf[3];
+      	pbuf[4] = tempbuf[4];
+      	pbuf[5] = tempbuf[5];
+      	pbuf[6] = tempbuf[6];
+      	/*
+      	pbuf[0] = 0x00; // 0x20
+  		pbuf[1] = 0xC2;
+		pbuf[2] = 0x01;
+		pbuf[3] = 0x00;
+		pbuf[4] = 0x00;
+		pbuf[5] = 0x00;
+		pbuf[6] = 0x08;
+      	 */
 
     break;
 
@@ -266,14 +289,15 @@ static int8_t CDC_Receive_FS(uint8_t* Buf, uint32_t *Len)
   /* USER CODE BEGIN 6 */
   USBD_CDC_SetRxBuffer(&hUsbDeviceFS, &Buf[0]); // переставить
   USBD_CDC_ReceivePacket(&hUsbDeviceFS);
-    usbRxBufferSize=*Len;
-//     if(usbRxBufferSize>32) return (USBD_FAIL);
+  usbRxBufferSize=*Len;
+  memcpy(usbRxBuffer, Buf, usbRxBufferSize);
 
-     for(uint16_t i =0; i<usbRxBufferSize; i++){
-     	  usbRxBuffer[i]=Buf[i];
-     }
-     //сюда
-
+//     for(uint16_t i =0; i<usbRxBufferSize; i++){
+//     	  usbRxBuffer[i]=Buf[i];
+//     }
+//     //сюда
+  USBD_CDC_SetRxBuffer(&hUsbDeviceFS, &Buf[0]); // переставить
+  USBD_CDC_ReceivePacket(&hUsbDeviceFS);
   osSemaphoreRelease(usbSemHandle);
   return (USBD_OK);
   /* USER CODE END 6 */
@@ -299,9 +323,6 @@ uint8_t CDC_Transmit_FS(uint8_t* Buf, uint16_t Len)
     return USBD_BUSY;
   }
   USBD_CDC_SetTxBuffer(&hUsbDeviceFS, Buf, Len);
-
-
-
   result = USBD_CDC_TransmitPacket(&hUsbDeviceFS);
   /* USER CODE END 7 */
   return result;

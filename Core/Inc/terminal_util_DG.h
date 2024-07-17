@@ -259,23 +259,7 @@ void robotHandler(){
 //		lightEffect = 2;
 		if(!inProgress) setRedTrafficLight();
 	}
-#ifdef REMOTE
-	if(controllerError){
-		static uint8_t a;
-		if(HAL_GetTick()-beepTimer >= 800){
-			beepTimer = HAL_GetTick();
-			a=!a;
-			setErrLamp(a);
-			setAlarmSound(a);
-		}
-	}else if(techBreack){
-		setErrLamp(1);
-		setAlarmSound(0);
-	} else {
-		setErrLamp(0);
-		setAlarmSound(0);
-	}
-#endif
+
 	/* END OF CODE Генератор статуса "Готов" */
 setRobotGatesIsOpen((getClosedInSw() || getClosedOutSw())); //Сигнал открытых ворот для вентиляции
 	/* Сетофор */
@@ -444,6 +428,22 @@ gateMode = 1;
 
 	setHandGreen(getHandBoxGreen());
 	setHandRed(getHandBoxRed());
+
+	if(	controllerError) {
+		static uint8_t a;
+		if(HAL_GetTick()-beepTimer >= 800) {
+			beepTimer = HAL_GetTick();
+			a=!a;
+			setErrLamp(a);
+			setAlarmSound(a);
+		}
+	} else if(techBreack) {
+		setErrLamp(1);
+		setAlarmSound(0);
+	} else {
+		setErrLamp(0);
+		setAlarmSound(0);
+	}
 }
 
 void controllerReset(){
