@@ -11,8 +11,13 @@
 #include "main.h"
 #include "Modbus.h"
 extern UART_HandleTypeDef huart4;
+extern UART_HandleTypeDef huart1;
 extern osMessageQueueId_t uart4DataSizeHandle;
+extern osMessageQueueId_t uart1DataSizeHandle;
+extern osSemaphoreId_t usbSemHandle;
 extern uint8_t dataUartBuffer[];
+extern uint8_t usbRxBuffer[];
+extern uint16_t usbRxBufferSize;
 //extern uint16_t  dataUartSize;
 /**
  * @brief
@@ -133,10 +138,16 @@ void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
 void HAL_UARTEx_RxEventCallback(UART_HandleTypeDef *huart, uint16_t Size)
 {
 	    BaseType_t xHigherPriorityTaskWoken = pdFALSE;
+	    if(huart == &huart1){
+//	    	usbRxBufferSize = Size;
+//	    	osSemaphoreRelease(usbSemHandle);
+	    	osMessageQueuePut(uart1DataSizeHandle, &Size, NULL, 0U);
+	    	HAL_UARTEx_ReceiveToIdle_IT(&huart1, usbRxBuffer, 16);
+	    }
 	      if(huart == &huart4)
 	        {
-	    	  osMessageQueuePut(uart4DataSizeHandle, &Size, NULL, 0U);
 //	          dataUartSize = Size;
+	    	  osMessageQueuePut(uart4DataSizeHandle, &Size, NULL, 0U);
 	          HAL_UARTEx_ReceiveToIdle_IT(&huart4, dataUartBuffer, 5);
 	        }
 		/* Modbus RTU RX callback BEGIN */

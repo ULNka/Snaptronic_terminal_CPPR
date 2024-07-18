@@ -10,10 +10,10 @@
 
 #define OWEN_OFFSET 512
 #define USB_ID 0x1F
-#define MAX_USB_BUFF_SIZE 64
+#define MAX_USB_BUFF_SIZE 32
 
 //#include "modbus_util.h"
-#include "usbd_cdc_if.h"
+//#include "usbd_cdc_if.h"
 uint8_t usbRxBuffer[MAX_USB_BUFF_SIZE], usbTxBuffer[MAX_USB_BUFF_SIZE]; //Буферы данных USB
 uint16_t usbHoldingRegister[16]; //Массив Регистров хранения (HoldingRegister)
 uint8_t usbDiscreteRegister[10]; //Массив дискретных регистров
@@ -23,8 +23,8 @@ uint16_t modbusSlaveCRC;
 uint8_t crcArray[2];
 uint8_t command;
 
-extern UART_HandleTypeDef huart4;  //Дескриптор порта отладки
-extern uint8_t CDC_Transmit_FS(uint8_t *Buf, uint16_t Len);
+extern UART_HandleTypeDef huart1;  //Дескриптор порта данных
+//extern uint8_t CDC_Transmit_FS(uint8_t *Buf, uint16_t Len);
 void usbBufferClear();
 
 uint16_t modbusCalcCRC(uint8_t bufferArray[], uint16_t length);
@@ -100,7 +100,8 @@ uint8_t checkSlaveCRC() { // Проверяем входящие данные н
 }
 
 void sendEcho() {
-	CDC_Transmit_FS(usbRxBuffer, usbRxBufferSize);
+//	CDC_Transmit_FS(usbRxBuffer, usbRxBufferSize);
+	HAL_UART_Transmit_IT(&huart1, usbRxBuffer, usbRxBufferSize);
 }
 
 void readHoldingRegister() {
@@ -130,7 +131,9 @@ void readHoldingRegister() {
 	modbusCRCtoArray(modbusCalcCRC(usbTxBuffer, numberOfregisters + 4));
 	usbTxBuffer[usbTxBuffer[2] + 3] = crcArray[0];
 	usbTxBuffer[usbTxBuffer[2] + 4] = crcArray[1];
-	CDC_Transmit_FS(usbTxBuffer, usbTxBuffer[2] + 5);
+//	CDC_Transmit_FS(usbTxBuffer, usbTxBuffer[2] + 5);
+	HAL_UART_Transmit_IT(&huart1, usbTxBuffer, usbTxBuffer[2] + 5);
+
 
 }
 
@@ -173,7 +176,9 @@ void readDiscreteInputs() {
 	modbusCRCtoArray(modbusCalcCRC(usbTxBuffer, numberOfBytes + 3));
 	usbTxBuffer[numberOfBytes + 3] = crcArray[0];
 	usbTxBuffer[numberOfBytes + 4] = crcArray[1];
-	CDC_Transmit_FS(usbTxBuffer, numberOfBytes + 5);
+//	CDC_Transmit_FS(usbTxBuffer, numberOfBytes + 5);
+	HAL_UART_Transmit_IT(&huart1, usbTxBuffer, numberOfBytes + 5);
+
 }
 
 void readDiscreteRegisterOwen() {
@@ -208,7 +213,9 @@ void readDiscreteRegisterOwen() {
 	modbusCRCtoArray(modbusCalcCRC(usbTxBuffer, usbTxBuffer[2] + 3)); //Считаем контрольку
 	usbTxBuffer[usbTxBuffer[2] + 3] = crcArray[0];
 	usbTxBuffer[usbTxBuffer[2] + 4] = crcArray[1];
-	CDC_Transmit_FS(usbTxBuffer, usbTxBuffer[2] + 5); //Шлем ответ
+//	CDC_Transmit_FS(usbTxBuffer, usbTxBuffer[2] + 5); //Шлем ответ
+	HAL_UART_Transmit_IT(&huart1, usbTxBuffer, usbTxBuffer[2] + 5);
+
 }
 
 void writeDiscreteRegisterOwen() {
@@ -243,7 +250,9 @@ void sendError(uint8_t error) {
 	modbusCRCtoArray(modbusCalcCRC(usbTxBuffer, 3));
 	usbTxBuffer[3] = crcArray[0];
 	usbTxBuffer[4] = crcArray[1];
-	CDC_Transmit_FS(usbTxBuffer, 5);
+//	CDC_Transmit_FS(usbTxBuffer, 5);
+	HAL_UART_Transmit_IT(&huart1, usbTxBuffer, 5);
+
 }
 
 

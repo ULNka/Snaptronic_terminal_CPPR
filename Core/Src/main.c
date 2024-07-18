@@ -20,7 +20,6 @@
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
 #include "cmsis_os.h"
-#include "usb_device.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -72,6 +71,7 @@ TIM_HandleTypeDef htim4;
 
 UART_HandleTypeDef huart4;
 UART_HandleTypeDef huart5;
+UART_HandleTypeDef huart1;
 UART_HandleTypeDef huart3;
 DMA_HandleTypeDef hdma_uart4_rx;
 DMA_HandleTypeDef hdma_uart4_tx;
@@ -146,6 +146,11 @@ osMessageQueueId_t uart4DataSizeHandle;
 const osMessageQueueAttr_t uart4DataSize_attributes = {
   .name = "uart4DataSize"
 };
+/* Definitions for uart1DataSize */
+osMessageQueueId_t uart1DataSizeHandle;
+const osMessageQueueAttr_t uart1DataSize_attributes = {
+  .name = "uart1DataSize"
+};
 /* Definitions for usbLedTimer */
 osTimerId_t usbLedTimerHandle;
 const osTimerAttr_t usbLedTimer_attributes = {
@@ -197,6 +202,7 @@ static void MX_UART5_Init(void);
 static void MX_USART3_UART_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_IWDG_Init(void);
+static void MX_USART1_UART_Init(void);
 void StartDefaultTask(void *argument);
 void StartSysUtil(void *argument);
 void StartIOUtil(void *argument);
@@ -210,24 +216,12 @@ void usbLedCallback(void *argument);
 void noConnectCallback(void *argument);
 
 /* USER CODE BEGIN PFP */
-int16_t map(int16_t input, int16_t inMin, int16_t inMax, int16_t outMin,
-		int16_t outMax) {
-	int16_t result;
-	result = (((input - inMin) * (outMax - outMin)) / (inMax - inMin)) + outMin;
-	return result;
-}
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-//int _write(int file, char *ptr, int len){
-//	int i=0;
-//	for(i=0; i<len; i++){
-//		ITM_SendChar((*ptr++));
-//		return len;
-//	}
-//}
+
 void HAL_GPIO_EXTI_Callback(uint16_t GPIO_Pin)
 {
         if(wig_flag_inrt && GPIO_Pin == D0)
@@ -280,7 +274,7 @@ struct dataMain settings;
   SystemClock_Config();
 
   /* USER CODE BEGIN SysInit */
-  usbReInit();
+//  usbReInit(); // Иницализация USB
 
   /* USER CODE END SysInit */
 
@@ -295,11 +289,12 @@ struct dataMain settings;
   MX_USART3_UART_Init();
   MX_ADC1_Init();
   MX_IWDG_Init();
+  MX_USART1_UART_Init();
   /* USER CODE BEGIN 2 */
+  ledInit();
 //  HAL_GPIO_WritePin(WP_GPIO_Port, WP_Pin, 1);
 
-  ledInit();
-  LCD_Init();
+//  LCD_Init();
 //  LCD_SendString("    AquaRobot ");
 
   HAL_ADCEx_Calibration_Start(&hadc1);
@@ -311,8 +306,8 @@ struct dataMain settings;
   settings.gateMode=1;
   settings.coolerTemp=30;
   settings.heaterTemp = 5;
-//  timeToEntance = settings.timeToEntance;
-  timeToEntance = 30;
+
+  timeToEntance = settings.timeToEntance;
   timeToExit = settings.timeToExit;
   startDelay = settings.startDelay;
   gateMode = settings.gateMode;
@@ -325,7 +320,6 @@ struct dataMain settings;
   ModbusH2.port =  &huart3;
   ModbusH2.u8id = 0; // For master it must be 0
   ModbusH2.u16timeOut = 100;
-//  ModbusH2.EN_Port = NULL;
   ModbusH2.EN_Port = RE2_GPIO_Port;
   ModbusH2.EN_Pin = RE2_Pin;
   ModbusH2.u16regs = ModbusDATA;
@@ -335,9 +329,9 @@ struct dataMain settings;
   ModbusInit(&ModbusH2);
   //Start capturing traffic on serial Port
   ModbusStart(&ModbusH2);
-//  HAL_UARTEx_Receive_DMA(&huart4, dataUartBuffer, 5);
-//  HAL_UART_Receive_IT(&huart4, dataUartBuffer, 5);
+  // Старт UART подсветки и обмена С ПО
   HAL_UARTEx_ReceiveToIdle_IT(&huart4, dataUartBuffer, 5);
+  HAL_UARTEx_ReceiveToIdle_IT(&huart1, usbRxBuffer, 16);
   /* USER CODE END 2 */
 
   /* Init scheduler */
@@ -371,6 +365,9 @@ struct dataMain settings;
   /* Create the queue(s) */
   /* creation of uart4DataSize */
   uart4DataSizeHandle = osMessageQueueNew (4, sizeof(uint16_t), &uart4DataSize_attributes);
+
+  /* creation of uart1DataSize */
+  uart1DataSizeHandle = osMessageQueueNew (4, sizeof(uint16_t), &uart1DataSize_attributes);
 
   /* USER CODE BEGIN RTOS_QUEUES */
   /* add queues, ... */
@@ -467,9 +464,8 @@ void SystemClock_Config(void)
   {
     Error_Handler();
   }
-  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_ADC|RCC_PERIPHCLK_USB;
+  PeriphClkInit.PeriphClockSelection = RCC_PERIPHCLK_ADC;
   PeriphClkInit.AdcClockSelection = RCC_ADCPCLK2_DIV6;
-  PeriphClkInit.UsbClockSelection = RCC_USBCLKSOURCE_PLL_DIV1_5;
   if (HAL_RCCEx_PeriphCLKConfig(&PeriphClkInit) != HAL_OK)
   {
     Error_Handler();
@@ -776,6 +772,39 @@ static void MX_UART5_Init(void)
 }
 
 /**
+  * @brief USART1 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_USART1_UART_Init(void)
+{
+
+  /* USER CODE BEGIN USART1_Init 0 */
+
+  /* USER CODE END USART1_Init 0 */
+
+  /* USER CODE BEGIN USART1_Init 1 */
+
+  /* USER CODE END USART1_Init 1 */
+  huart1.Instance = USART1;
+  huart1.Init.BaudRate = 19200;
+  huart1.Init.WordLength = UART_WORDLENGTH_8B;
+  huart1.Init.StopBits = UART_STOPBITS_1;
+  huart1.Init.Parity = UART_PARITY_NONE;
+  huart1.Init.Mode = UART_MODE_TX_RX;
+  huart1.Init.HwFlowCtl = UART_HWCONTROL_NONE;
+  huart1.Init.OverSampling = UART_OVERSAMPLING_16;
+  if (HAL_UART_Init(&huart1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN USART1_Init 2 */
+
+  /* USER CODE END USART1_Init 2 */
+
+}
+
+/**
   * @brief USART3 Initialization Function
   * @param None
   * @retval None
@@ -973,8 +1002,6 @@ static void MX_GPIO_Init(void)
 /* USER CODE END Header_StartDefaultTask */
 void StartDefaultTask(void *argument)
 {
-  /* init code for USB_DEVICE */
-  MX_USB_DEVICE_Init();
   /* USER CODE BEGIN 5 */
   /* Infinite loop */
   for(;;)
@@ -994,9 +1021,11 @@ void StartDefaultTask(void *argument)
 void StartSysUtil(void *argument)
 {
   /* USER CODE BEGIN StartSysUtil */
+//	char str[]={"Hello from uart1/r/n"};
   /* Infinite loop */
   for(;;)
   {
+//	HAL_UART_Transmit_IT(&huart1, str, sizeof(str));
 	HAL_GPIO_TogglePin(PWRLED_GPIO_Port, PWRLED_Pin);
 	HAL_IWDG_Refresh(&hiwdg);
 
@@ -1025,7 +1054,7 @@ void StartIOUtil(void *argument)
 		if (adcDataIsReady) {
 			adcDataIsReady = 0;
 			ain1 = adc[0];
-//			HAL_ADC_Stop_DMA(&hadc1); // это необязательно
+			HAL_ADC_Stop_DMA(&hadc1); // это необязательно
 //   		    ain1r += adc[0];
 //			counter++;
 //			if (counter == 5) {
@@ -1049,8 +1078,7 @@ void StartIOUtil(void *argument)
 		ain1 = (uint16_t) filVal;
 		*/
 
-			HAL_GPIO_WritePin(LED5_GPIO_Port, LED5_Pin, !controllerError);
-
+	HAL_GPIO_WritePin(LED5_GPIO_Port, LED5_Pin, !controllerError);
 
     osDelay(10); // Поменять на 10
   }
@@ -1070,7 +1098,8 @@ void StartUsbSlave(void *argument)
   /* Infinite loop */
   for(;;)
   {
-	osSemaphoreAcquire(usbSemHandle, portMAX_DELAY);
+//	osSemaphoreAcquire(usbSemHandle, portMAX_DELAY);
+	osMessageQueueGet(uart1DataSizeHandle, &usbRxBufferSize, NULL, portMAX_DELAY);
 	usbModbusProcessing(); //Обработчик данных с VCOM (USB COM Port)
 	HAL_GPIO_WritePin(LED4_GPIO_Port, LED4_Pin, 0); //Зажигаем синий диод при поступлении даннх
 	osTimerStart(noConnectTimerHandle, 10000);
